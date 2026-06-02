@@ -4,14 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>LAUM Vending</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LAUM Vending">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="apple-touch-startup-image" href="logo.png">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0a0e1a;--surface:#0f172a;--surface-2:#1a2235;--border:#1e293b;--border-hover:#334155;--text:#e2e8f0;--text-dim:#94a3b8;--text-mute:#64748b;--primary:#3b82f6;--primary-2:#06b6d4;--accent:#f97316;--success:#22c55e;--warning:#facc15;--danger:#ef4444}
 body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 
-.login-bg{position:fixed;inset:0;background:radial-gradient(ellipse at top left,#1e3a8a30 0%,transparent 50%),radial-gradient(ellipse at bottom right,#f9731620 0%,transparent 50%),#0a0e1a}
-.login-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.05) 1px,transparent 1px);background-size:50px 50px;animation:pan 30s linear infinite}
+.login-bg{position:fixed;inset:0;background:#0a0e1a}
+.login-video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.15;pointer-events:none;z-index:0}
+.login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,rgba(30,58,138,0.5) 0%,rgba(10,14,26,0.7) 50%,rgba(249,115,22,0.2) 100%);z-index:0;pointer-events:none}
+.login-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(59,130,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.04) 1px,transparent 1px);background-size:50px 50px;animation:pan 30s linear infinite;z-index:0}
 @keyframes pan{0%{background-position:0 0}100%{background-position:50px 50px}}
 .lwrap{position:relative;z-index:10;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 .lcard{background:rgba(15,23,42,0.7);backdrop-filter:blur(24px);border:1px solid rgba(59,130,246,0.2);border-radius:24px;padding:40px;width:100%;max-width:380px;box-shadow:0 30px 80px rgba(0,0,0,0.5),0 0 60px rgba(59,130,246,0.1);position:relative;overflow:hidden}
@@ -85,7 +94,9 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .fs-v{font-size:18px;font-weight:700;font-family:'Space Grotesk',monospace}
 .fs-l{font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-top:3px}
 
-.detail-view{padding:20px;max-width:1400px;margin:0 auto}
+.detail-view{padding:20px;max-width:1400px;margin:0 auto;position:relative;z-index:1}
+.detail-video{position:fixed;top:56px;left:0;right:0;bottom:0;width:100%;height:calc(100vh - 56px);object-fit:cover;opacity:0.08;pointer-events:none;z-index:0}
+.detail-voverlay{position:fixed;top:56px;left:0;right:0;bottom:0;background:linear-gradient(to bottom,rgba(10,14,26,0.5),rgba(10,14,26,0.85));z-index:0;pointer-events:none}
 .back-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:9px;color:var(--text-dim);cursor:pointer;font-size:12px;font-family:'Sarabun',sans-serif;margin-bottom:16px;transition:all .2s}
 .back-btn:hover{background:rgba(255,255,255,0.1);color:var(--text);transform:translateX(-2px)}
 .dt-header{background:linear-gradient(135deg,rgba(59,130,246,0.08),rgba(6,182,212,0.05));border:1px solid rgba(59,130,246,0.2);border-radius:16px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
@@ -235,9 +246,10 @@ function saveState(){try{localStorage.setItem("laum-vending-v6",JSON.stringify({
 let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:0,sold:0,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
 ST.in=false;ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
 ST.af={name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
-ST.period="today"; // วันนี้ | สัปดาห์ | เดือนนี้
-ST.summary=null;   // cache summary จาก Apps Script
+ST.period="today";
+ST.summary=null;
 ST.summaryLoading=false;
+ST.fleetSummary=null; // สรุปรวมทุกตู้ (จาก log)
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -386,6 +398,16 @@ function showToast(msg, type='info', onConfirm=null){
   }
 }
 
+// โหลด fleet summary รวมทุกตู้จาก log
+async function loadFleetSummary(){
+  // ใช้ sheetUrl จากตู้แรกที่มี URL (Apps Script เดียวกัน ดึง log ตู้ทั้งหมด)
+  const m=ST.machines.find(m=>m.sheetUrl&&m.sheetUrl.trim());
+  if(!m)return;
+  const data=await fetchSummary(m.sheetUrl,'today');
+  if(data)ST.fleetSummary=data;
+  render();
+}
+
 function render(){
   const R=document.getElementById("R");if(!R)return;
   if(!ST.in){R.innerHTML=loginHTML();bind();return}
@@ -416,7 +438,10 @@ function topbarHTML(){
 }
 
 function loginHTML(){
-  return `<div class="login-bg"></div><div class="login-grid"></div>
+  return `<div class="login-bg"></div>
+  <video class="login-video" autoplay muted loop playsinline><source src="./login-bg.mp4" type="video/mp4"></video>
+  <div class="login-overlay"></div>
+  <div class="login-grid"></div>
   <div class="lwrap"><div class="lcard">
     <div class="llogo"><img src="${LOGO}" alt="LAUM Vending"></div>
     <div class="ltitle">LAUM VENDING</div>
@@ -429,10 +454,13 @@ function loginHTML(){
 }
 
 function fleetHTML(){
-  const fleetRev=ST.machines.reduce((a,m)=>a+m.rev,0);
-  const fleetSold=ST.machines.reduce((a,m)=>a+m.sold,0);
-  const fleetStock=ST.machines.reduce((a,m)=>a+ci(m),0);
-  const fleetMax=ST.machines.reduce((a,m)=>a+tm(m),0);
+  // ดึงจาก ST.fleetSummary (log รวมทุกตู้) ถ้ามี ไม่งั้นใช้ 0
+  const fs=ST.fleetSummary;
+  const fleetRev   = fs ? fs.revenue : 0;
+  const fleetSold  = fs ? fs.sales   : 0;
+  const fleetProfit= fs ? fs.profit  : 0;
+  const fleetStock =ST.machines.reduce((a,m)=>a+ci(m),0);
+  const fleetMax   =ST.machines.reduce((a,m)=>a+tm(m),0);
   const fleetAlerts=ST.machines.reduce((a,m)=>a+m.slots.filter(s=>s.c===0).length,0);
 
   const items=[...ST.machines,{id:"ADD"}];
@@ -483,8 +511,8 @@ function fleetHTML(){
       <div class="orbit-system">${nodes}</div>
     </div>
     <div class="fleet-stats">
-      <div class="fs-card"><div class="fs-ic-svg" style="color:var(--success)">${ICON.revenue}</div><div class="fs-v" style="color:var(--success)">฿${fleetRev.toLocaleString()}</div><div class="fs-l">รายได้รวม</div></div>
-      <div class="fs-card"><div class="fs-ic-svg" style="color:var(--primary)">${ICON.sales}</div><div class="fs-v" style="color:var(--primary)">${fleetSold}</div><div class="fs-l">ยอดขายวันนี้</div></div>
+      <div class="fs-card"><div class="fs-ic-svg" style="color:var(--success)">${ICON.revenue}</div><div class="fs-v" style="color:var(--success)">฿${fleetRev.toLocaleString()}</div><div class="fs-l">รายรับรวม${fs?'':' <span style="font-size:9px;color:var(--text-mute)">(กด Refresh)</span>'}</div></div>
+      <div class="fs-card"><div class="fs-ic-svg" style="color:#4ade80">${ICON.revenue}</div><div class="fs-v" style="color:#4ade80">฿${fleetProfit.toLocaleString()}</div><div class="fs-l">กำไรสุทธิ</div></div>
       <div class="fs-card"><div class="fs-ic-svg" style="color:#a78bfa">${ICON.stock}</div><div class="fs-v" style="color:#a78bfa">${fleetStock}/${fleetMax}</div><div class="fs-l">สต็อกรวม</div></div>
       <div class="fs-card"><div class="fs-ic-svg" style="color:${fleetAlerts>0?'var(--danger)':'var(--success)'}">${fleetAlerts>0?ICON.alert:ICON.check}</div><div class="fs-v" style="color:${fleetAlerts>0?'var(--danger)':'var(--success)'}">${fleetAlerts}</div><div class="fs-l">แจ้งเตือน</div></div>
     </div>
@@ -496,7 +524,9 @@ function detailHTML(m){
   const ti=ci(m),to=tm(m),tr=rf(m);
   const alerts=m.slots.filter(s=>s.c===0);
   const lows=m.slots.filter(s=>s.c>0&&s.c/s.mx<0.25);
+  const hasDashVid = m && m.sheetUrl;
   let h=`<div class="detail-view">
+    ${hasDashVid?`<video class="detail-video" autoplay muted loop playsinline><source src="./bg.mp4" type="video/mp4"></video><div class="detail-voverlay"></div>`:''}
     <button class="back-btn" id="back-fleet">← กลับสู่ Fleet</button>
     <div class="dt-header">
       <div>
@@ -813,7 +843,7 @@ function bind(){
     ST.summaryLoading=false;render();
   });
   on('logout','click',()=>{ST.in=false;ST.pw='';ST.view='fleet';render()});
-  on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render()});
+  on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
   document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render()}));
@@ -903,7 +933,8 @@ function bind(){
 }
 
 function doLogin(){
-  if(ST.pw===PASS){ST.in=true;ST.err=false}else ST.err=true;
+  if(ST.pw===PASS){ST.in=true;ST.err=false;setTimeout(loadFleetSummary,500);}
+  else ST.err=true;
   render();
 }
 

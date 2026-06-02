@@ -134,6 +134,9 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .rfrow{display:grid;grid-template-columns:60px 2fr 1fr 1fr 1fr;gap:10px;align-items:center;padding:11px 14px;border-radius:11px;border:1px solid var(--border);background:rgba(15,23,42,0.6);font-size:12px}
 .rfrow.hdr{background:rgba(30,41,59,0.5);border-color:transparent;font-size:10px;color:var(--text-mute);font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .rfrow.urg{border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.05)}
+.btn-reset{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-mute);transition:all .2s;padding:0;margin:0 auto}
+.btn-reset svg{width:16px;height:16px}
+.btn-reset:hover{border-color:var(--primary);color:var(--primary);background:rgba(59,130,246,0.1);transform:rotate(180deg)}
 .rfimg{width:46px;height:46px;border-radius:9px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden}
 .rfimg img{width:100%;height:100%;object-fit:contain}
 
@@ -265,17 +268,24 @@ function convertImageUrl(url) {
 // แปลง product objects จาก Apps Script → slots array
 function productsToSlots(products) {
   const typeEmoji = {"กระป๋อง":"🥤","ขวดแก้ว":"🧃","ขวด":"💧"};
-  return products.map(p => ({
-    s:    p.slot,
-    n:    p.name,
-    e:    typeEmoji[p.type] || "🥤",
-    img:  p.imgUrl || "",
-    p:    p.price || 15,
-    mx:   p.maxQty || 20,
-    c:    p.stock  || 0,
-    type: p.type   || "ขวด",
-    cost: p.cost   || 0,
-  })).sort((a,b) => a.s - b.s);
+  return products.map(p => {
+    const max = parseInt(p.maxQty) || 20;
+    // stock จาก K — ถ้า Apps Script ส่ง null/undefined มาให้ default เป็น max
+    const cur = (p.stock !== null && p.stock !== undefined && !isNaN(parseInt(p.stock)))
+                  ? Math.min(parseInt(p.stock), max)   // ไม่เกิน max
+                  : max;
+    return {
+      s:    p.slot,
+      n:    p.name,
+      e:    typeEmoji[p.type] || "🥤",
+      img:  p.imgUrl || "",
+      p:    parseFloat(p.price) || 15,
+      mx:   max,
+      c:    cur,
+      type: p.type || "ขวด",
+      cost: parseFloat(p.cost) || 0,
+    };
+  }).sort((a,b) => a.s - b.s);
 }
 
 // ดึงข้อมูลผ่าน Apps Script URL
@@ -482,31 +492,52 @@ function detailHTML(m){
   }
   if(ST.tab==="refill"){
     const total=m.slots.reduce((a,s)=>a+(s.mx-s.c),0);
+    const needCount=m.slots.filter(s=>s.mx-s.c>0).length;
     h+=`<div style="display:flex;flex-direction:column;gap:7px">
-      <div class="rfrow hdr">
+
+      <!-- ปุ่มรีเซ็ททั้งหมด -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px">
+        <div>
+          <div style="font-size:14px;font-weight:700">สรุปการเติมรอบนี้</div>
+          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">${needCount} รายการ · ต้องเติม ${total} ขวด</div>
+        </div>
+        <button class="btn pri" id="reset-all" style="padding:9px 16px;font-size:12px;display:flex;align-items:center;gap:6px">
+          ${ICON.cycle}<span>รีเซ็ทสต็อกทั้งหมด</span>
+        </button>
+      </div>
+
+      <!-- header -->
+      <div class="rfrow hdr" style="grid-template-columns:50px 2fr 1fr 1fr 80px">
         <span style="text-align:center">รูป</span>
         <span>สินค้า</span>
-        <span style="text-align:center">เหลือ</span>
+        <span style="text-align:center">เหลือ/Max</span>
         <span style="text-align:center">เติม</span>
-        <span style="text-align:center">ราคา</span>
+        <span style="text-align:center">รีเซ็ท</span>
       </div>`;
+
     m.slots.slice().sort((a,b)=>(b.mx-b.c)-(a.mx-a.c)).forEach(s=>{
-      const r=s.mx-s.c,p=Math.round(s.c/s.mx*100),u=p<25;
+      const r=s.mx-s.c, p=s.mx>0?Math.round(s.c/s.mx*100):0, u=p<25&&s.c<s.mx;
       const imgUrl=convertImageUrl(s.img);
       const imgHTML=s.img?`<img src="${imgUrl}" referrerpolicy="no-referrer" onerror="this.outerHTML='${s.e}'">`:s.e;
-      h+=`<div class="rfrow${u?' urg':''}">
+      h+=`<div class="rfrow${u?' urg':''}" style="grid-template-columns:50px 2fr 1fr 1fr 80px">
         <div class="rfimg">${imgHTML}</div>
-        <div><div style="font-size:13px;font-weight:600">ช่อง ${s.s} · ${s.n}</div></div>
-        <div style="text-align:center;color:${u?'var(--danger)':'var(--text-dim)'};font-size:14px;font-weight:${u?'700':'500'}">${s.c}</div>
+        <div>
+          <div style="font-size:12px;font-weight:600">ช่อง ${s.s} · ${s.n}</div>
+          <div style="font-size:10px;color:var(--text-mute);margin-top:2px">฿${s.p}</div>
+        </div>
+        <div style="text-align:center">
+          <span style="color:${u?'var(--danger)':'var(--text-dim)'};font-size:14px;font-weight:${u?'700':'500'}">${s.c}</span>
+          <span style="color:var(--text-mute);font-size:11px">/${s.mx}</span>
+        </div>
         <div style="text-align:center;color:${r>0?'var(--primary)':'var(--success)'};font-size:14px;font-weight:700">${r>0?'+'+r:'✓'}</div>
-        <div style="text-align:center;color:var(--text-mute);font-size:12px">฿${s.p}</div>
+        <div style="text-align:center">
+          <button class="btn-reset" data-slot="${s.s}" data-max="${s.mx}" title="รีเซ็ทช่อง ${s.s} → ${s.mx}/${s.mx}">
+            ${ICON.cycle}
+          </button>
+        </div>
       </div>`;
     });
-    h+=`<div style="background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(6,182,212,0.05));border:1px solid rgba(59,130,246,0.3);border-radius:13px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-      <div><div style="font-size:14px;font-weight:700">สรุปการเติมรอบนี้</div>
-      <div style="font-size:11px;color:var(--text-mute);margin-top:2px">${m.slots.filter(s=>s.mx-s.c>0).length} รายการ</div></div>
-      <div style="font-size:24px;font-weight:800;color:var(--primary);font-family:'Space Grotesk',monospace">${total} ขวด</div>
-    </div></div>`;
+    h+=`</div>`;
   }
   h+=`</div>`;
   return h;
@@ -648,6 +679,39 @@ function bind(){
     ST.modal='';ST.imgSlot=null;ST.imgInput='';saveState();render();
   });
   document.querySelectorAll('#mc').forEach(el=>el.addEventListener('click',()=>{ST.modal='';ST.imgSlot=null;ST.imgInput='';render()}));
+
+  // ── Reset slot buttons (หน้าการเติม) ──
+  document.querySelectorAll('.btn-reset').forEach(el=>el.addEventListener('click',()=>{
+    const slot=parseInt(el.dataset.slot);
+    const max=parseInt(el.dataset.max);
+    if(!confirm(`รีเซ็ทช่อง ${slot} → ${max}/${max} ขวด?\n(กดตกลงเมื่อเติมสินค้าแล้ว)`))return;
+    // อัปเดต local state
+    ST.machines=ST.machines.map(m=>m.id===ST.sel?{...m,slots:m.slots.map(s=>s.s===slot?{...s,c:max}:s)}:m);
+    saveState();
+    render();
+    // ยิง Apps Script ถ้าตั้งค่าไว้
+    const machine=selM();
+    if(machine&&machine.sheetUrl&&machine.sheetUrl.includes("script.google.com")){
+      fetch(machine.sheetUrl,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"refill",machineId:machine.id,slot})}).catch(()=>{});
+    }
+  }));
+
+  // ── Reset ALL button ──
+  on('reset-all','click',()=>{
+    const m=selM();
+    if(!m)return;
+    const count=m.slots.filter(s=>s.mx-s.c>0).length;
+    if(!confirm(`รีเซ็ทสต็อกทั้งหมด ${count} รายการ?\n(กดตกลงเมื่อเติมสินค้าครบแล้ว)`))return;
+    ST.machines=ST.machines.map(mc=>mc.id===ST.sel?{...mc,slots:mc.slots.map(s=>({...s,c:s.mx}))}:mc);
+    saveState();
+    render();
+    // ยิง Apps Script
+    if(m.sheetUrl&&m.sheetUrl.includes("script.google.com")){
+      fetch(m.sheetUrl,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"refill_all",machineId:m.id})}).catch(()=>{});
+    }
+  });
 }
 
 function doLogin(){

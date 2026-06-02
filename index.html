@@ -41,6 +41,8 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 
 .fleet-view{min-height:calc(100vh - 56px);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:30px 20px;position:relative;overflow:hidden}
 .fleet-bg{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(59,130,246,0.08) 0%,transparent 60%);pointer-events:none}
+.fleet-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.12;pointer-events:none;z-index:0}
+.fleet-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,14,26,0.3) 0%,rgba(10,14,26,0.6) 100%);pointer-events:none;z-index:0}
 .fleet-header{text-align:center;margin-bottom:20px;z-index:5;position:relative}
 .fleet-title{font-size:24px;font-weight:800;letter-spacing:2px;margin-bottom:4px;background:linear-gradient(135deg,#fff,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .fleet-sub{font-size:10px;color:var(--text-mute);letter-spacing:3px;text-transform:uppercase}
@@ -137,6 +139,9 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .btn-reset{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-mute);transition:all .2s;padding:0;margin:0 auto}
 .btn-reset svg{width:16px;height:16px}
 .btn-reset:hover{border-color:var(--primary);color:var(--primary);background:rgba(59,130,246,0.1);transform:rotate(180deg)}
+.period-btn{padding:5px 11px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px;color:var(--text-mute);font-family:'Sarabun',sans-serif;transition:all .15s}
+.period-btn:hover{border-color:var(--border-hover);color:var(--text)}
+.period-btn.active{background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.4);color:var(--primary);font-weight:700}
 .rfimg{width:46px;height:46px;border-radius:9px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden}
 .rfimg img{width:100%;height:100%;object-fit:contain}
 
@@ -224,12 +229,15 @@ const DEFAULT_SLOTS=[
 ];
 const SALES=[3,7,5,12,18,14,9,11,8];
 
-function loadState(){try{const s=localStorage.getItem("laum-vending-v4");if(s)return JSON.parse(s);}catch(e){}return null;}
-function saveState(){try{localStorage.setItem("laum-vending-v4",JSON.stringify({machines:ST.machines}));}catch(e){}}
+function loadState(){try{const s=localStorage.getItem("laum-vending-v6");if(s)return JSON.parse(s);}catch(e){}return null;}
+function saveState(){try{localStorage.setItem("laum-vending-v6",JSON.stringify({machines:ST.machines}));}catch(e){}}
 
-let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:1340,sold:67,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
+let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:0,sold:0,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
 ST.in=false;ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
 ST.af={name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
+ST.period="today"; // วันนี้ | สัปดาห์ | เดือนนี้
+ST.summary=null;   // cache summary จาก Apps Script
+ST.summaryLoading=false;
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -332,6 +340,18 @@ function ci(m){return m.slots.reduce((a,s)=>a+s.c,0)}
 function tm(m){return m.slots.reduce((a,s)=>a+s.mx,0)}
 function rf(m){return m.slots.reduce((a,s)=>a+(s.mx-s.c),0)}
 function selM(){return ST.machines.find(m=>m.id===ST.sel)}
+
+// ดึงสรุปรายได้/กำไร/ต้นทุนจาก log ผ่าน Apps Script
+async function fetchSummary(gasUrl, period){
+  if(!gasUrl||!gasUrl.trim())return null;
+  const url=gasUrl.trim()+(gasUrl.includes('?')?'&':'?')+'action=summary&period='+period;
+  try{
+    const res=await fetch(url,{method:"GET",redirect:"follow",cache:"no-store"});
+    if(!res.ok)return null;
+    const json=await res.json();
+    return json.ok?json:null;
+  }catch(e){return null;}
+}
 
 // ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
 function showToast(msg, type='info', onConfirm=null){
@@ -447,6 +467,10 @@ function fleetHTML(){
   });
 
   return `<div class="fleet-view">
+    <video class="fleet-video" autoplay muted loop playsinline>
+      <source src="./bg.mp4" type="video/mp4">
+    </video>
+    <div class="fleet-overlay"></div>
     <div class="fleet-bg"></div>
     <div class="fleet-header">
       <div class="fleet-title">FLEET NETWORK</div>
@@ -492,77 +516,94 @@ function detailHTML(m){
       ${['dash','stock','refill'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle][i]}${['แดชบอร์ด','สต็อก','การเติม'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
-    const mxs=Math.max(...SALES);
-    // คำนวณต้นทุน/กำไรจากสต็อกที่ขายไปแล้ว (max - current = ขายออกไป)
-    const totalCostStock = m.slots.reduce((a,s)=>a+(s.cost||0)*s.mx,0);       // ต้นทุนทั้งหมดที่ลงทุน
-    const totalCostSold  = m.slots.reduce((a,s)=>a+(s.cost||0)*(s.mx-s.c),0); // ต้นทุนที่ขายออกไปแล้ว
-    const totalRevSold   = m.slots.reduce((a,s)=>a+s.p*(s.mx-s.c),0);         // รายรับจากที่ขายไปแล้ว
-    const totalProfit    = totalRevSold - totalCostSold;                         // กำไรสุทธิ
-    const totalCostRemain= m.slots.reduce((a,s)=>a+(s.cost||0)*s.c,0);         // ต้นทุนสต็อกที่เหลือ
-
+    // สต็อก KPI (จาก Sheet ปัจจุบัน)
     h+=`<div class="kpis">
-      <div class="kpi" style="--c:var(--success)"><div class="kpi-ic" style="color:var(--success)">${ICON.revenue}</div><div class="kpi-v" style="color:var(--success)">฿${m.rev.toLocaleString()}</div><div class="kpi-l">รายได้วันนี้</div></div>
-      <div class="kpi" style="--c:var(--primary)"><div class="kpi-ic" style="color:var(--primary)">${ICON.sales}</div><div class="kpi-v" style="color:var(--primary)">${m.sold}</div><div class="kpi-l">ขวดที่ขาย</div></div>
       <div class="kpi" style="--c:#a78bfa"><div class="kpi-ic" style="color:#a78bfa">${ICON.stock}</div><div class="kpi-v" style="color:#a78bfa">${ti}/${to}</div><div class="kpi-l">สต็อกคงเหลือ</div></div>
-      <div class="kpi" style="--c:var(--accent)"><div class="kpi-ic" style="color:var(--accent)">${ICON.refill}</div><div class="kpi-v" style="color:var(--accent)">${tr}</div><div class="kpi-l">ต้องเติม</div></div>
-    </div>
-
-    <!-- สรุปการเงิน -->
-    <div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:2px">
-      <div style="font-size:11px;color:var(--text-mute);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px">สรุปการเงิน (จากสต็อกที่ขายออกไปแล้ว)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
-        <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:11px;padding:12px;text-align:center">
-          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">รายรับรวม</div>
-          <div style="font-size:17px;font-weight:700;color:var(--success);font-family:'Space Grotesk',monospace">฿${Math.round(totalRevSold).toLocaleString()}</div>
-        </div>
-        <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:11px;padding:12px;text-align:center">
-          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">ต้นทุนรวม</div>
-          <div style="font-size:17px;font-weight:700;color:var(--danger);font-family:'Space Grotesk',monospace">฿${Math.round(totalCostSold).toLocaleString()}</div>
-        </div>
-        <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.2);border-radius:11px;padding:12px;text-align:center">
-          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">กำไรสุทธิ</div>
-          <div style="font-size:17px;font-weight:700;color:var(--accent);font-family:'Space Grotesk',monospace">฿${Math.round(totalProfit).toLocaleString()}</div>
-        </div>
-      </div>
-      <!-- profit bar -->
-      <div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-          <span style="font-size:10px;color:var(--text-mute)">อัตรากำไร</span>
-          <span style="font-size:11px;font-weight:700;color:var(--accent)">${totalRevSold>0?Math.round(totalProfit/totalRevSold*100):0}%</span>
-        </div>
-        <div style="background:rgba(0,0,0,0.3);border-radius:4px;height:6px;overflow:hidden">
-          <div style="height:100%;width:${totalRevSold>0?Math.min(100,Math.round(totalProfit/totalRevSold*100)):0}%;background:linear-gradient(90deg,var(--accent),var(--success));border-radius:4px"></div>
-        </div>
-      </div>
-      <!-- breakdown -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;color:var(--text-mute)">ต้นทุนสต็อกที่เหลือ</span>
-          <span style="font-size:12px;font-weight:600;color:var(--text-dim)">฿${Math.round(totalCostRemain).toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;color:var(--text-mute)">ต้นทุนลงทุนรวม</span>
-          <span style="font-size:12px;font-weight:600;color:var(--text-dim)">฿${Math.round(totalCostStock).toLocaleString()}</span>
-        </div>
-      </div>
+      <div class="kpi" style="--c:var(--accent)"><div class="kpi-ic" style="color:var(--accent)">${ICON.refill}</div><div class="kpi-v" style="color:var(--accent)">${tr}</div><div class="kpi-l">ต้องเติม (ขวด)</div></div>
+      <div class="kpi" style="--c:var(--danger)"><div class="kpi-ic" style="color:var(--danger)">${ICON.alert}</div><div class="kpi-v" style="color:var(--danger)">${alerts.length}</div><div class="kpi-l">ช่องหมด</div></div>
+      <div class="kpi" style="--c:var(--warning)"><div class="kpi-ic" style="color:var(--warning)">${ICON.alert}</div><div class="kpi-v" style="color:var(--warning)">${lows.length}</div><div class="kpi-l">ใกล้หมด</div></div>
     </div>`;
+
+    // alerts
     if(alerts.length||lows.length){
-      h+=`<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px">`;
+      h+=`<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:4px">`;
       alerts.forEach(s=>{h+=`<div class="alert" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:var(--danger)">${ICON.alert}<span><b>ช่อง ${s.s}</b> · ${s.n} — สต็อกหมด!</span></div>`;});
-      lows.forEach(s=>{h+=`<div class="alert" style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);color:var(--warning)">${ICON.alert}<span><b>ช่อง ${s.s}</b> · ${s.n} — เหลือ ${s.c}/${s.mx} ขวด</span></div>`;});
+      lows.forEach(s=>{h+=`<div class="alert" style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);color:var(--warning)">${ICON.alert}<span><b>ช่อง ${s.s}</b> · ${s.n} — เหลือ ${s.c}/${s.mx}</span></div>`;});
       h+=`</div>`;
     }else{
-      h+=`<div class="alert" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:var(--success);margin-bottom:12px">${ICON.check}<span>ทุกช่องปกติ ไม่มีการแจ้งเตือน</span></div>`;
+      h+=`<div class="alert" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:var(--success);margin-bottom:4px">${ICON.check}<span>ทุกช่องปกติ</span></div>`;
     }
-    h+=`<div class="chart-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div style="font-size:13px;color:var(--text-dim);font-weight:600" class="chart-ic">${ICON.chart}ยอดขายรายชั่วโมง</div>
-        <div style="font-size:10px;color:var(--text-mute)">PEAK ${mxs} ขวด</div>
+
+    // ── สรุปการเงินจาก log ──
+    const s=ST.summary;
+    const periodLabels={today:"วันนี้",week:"สัปดาห์นี้",month:"เดือนนี้",all:"ทั้งหมด"};
+    const periodKeys=["today","week","month","all"];
+
+    h+=`<div style="background:rgba(15,23,42,0.7);border:1px solid var(--border);border-radius:14px;padding:16px">
+      <!-- header + period selector -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">สรุปรายรับ-รายจ่าย</div>
+        <div style="display:flex;gap:5px">
+          ${periodKeys.map(p=>`<button class="period-btn${ST.period===p?' active':''}" data-period="${p}">${periodLabels[p]}</button>`).join('')}
+        </div>
+      </div>`;
+
+    if(ST.summaryLoading){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+        กำลังดึงข้อมูลจาก log...
+      </div>`;
+    } else if(!m.sheetUrl){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">
+        ⚠️ เชื่อม Apps Script ก่อนเพื่อดูสรุปการเงิน
+      </div>`;
+    } else if(!s){
+      h+=`<div style="text-align:center;padding:16px">
+        <button class="btn pri" id="btn-load-summary" style="font-size:12px;padding:9px 18px">ดึงข้อมูลสรุป</button>
+      </div>`;
+    } else {
+      // ── 3 ก้อนเงินหลัก ──
+      const costRemain=m.slots.reduce((a,sl)=>a+(sl.cost||0)*sl.c,0);
+      h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">กำไรสุทธิ</div>
+          <div style="font-size:20px;font-weight:800;color:var(--success);font-family:'Space Grotesk',monospace">฿${s.profit.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--text-mute);margin-top:4px">เก็บไว้ขยายธุรกิจ</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">ต้นทุนขายออก</div>
+          <div style="font-size:20px;font-weight:800;color:var(--danger);font-family:'Space Grotesk',monospace">฿${s.cost.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--text-mute);margin-top:4px">นำกลับซื้อสินค้า</div>
+        </div>
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:14px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">รายรับรวม</div>
+          <div style="font-size:20px;font-weight:800;color:var(--primary);font-family:'Space Grotesk',monospace">฿${s.revenue.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--text-mute);margin-top:4px">${s.sales} ขวด · ${periodLabels[ST.period]}</div>
+        </div>
       </div>
-      <div class="chart-wrap">
-        ${SALES.map((v,i)=>{const hh=Math.round(v/mxs*78);return`<div class="chart-col"><div style="font-size:9px;color:var(--primary);font-weight:700;height:12px">${v}</div><div class="chart-bar" style="height:${hh}px"></div><div style="font-size:9px;color:var(--text-mute)">${8+i}:00</div></div>`;}).join('')}
+
+      <!-- profit bar -->
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:11px;color:var(--text-mute)">อัตรากำไร</span>
+          <span style="font-size:12px;font-weight:700;color:var(--success)">${s.profitPct}%</span>
+        </div>
+        <div style="background:rgba(0,0,0,0.3);border-radius:4px;height:7px;overflow:hidden">
+          <div style="height:100%;width:${Math.min(100,s.profitPct)}%;background:linear-gradient(90deg,var(--primary),var(--success));border-radius:4px;transition:width .5s"></div>
+        </div>
       </div>
-    </div>`;
+
+      <!-- ต้นทุนสต็อกที่เหลือ -->
+      <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);font-weight:600">ต้นทุนสต็อกที่เหลือในตู้</div>
+          <div style="font-size:10px;color:var(--text-mute);margin-top:2px">เงินที่ล็อกอยู่ในสินค้าปัจจุบัน</div>
+        </div>
+        <div style="font-size:18px;font-weight:700;color:var(--warning);font-family:'Space Grotesk',monospace">฿${Math.round(costRemain).toLocaleString()}</div>
+      </div>
+      ${s.stuck>0?`<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;font-size:12px;color:var(--danger)">🚨 สินค้าติดตู้ ${s.stuck} ครั้ง${ST.period==='today'?' วันนี้':''}</div>`:''}
+    `}
+    h+=`</div>`;
   }
   if(ST.tab==="stock"){
     h+=`<div class="slot-grid">`;
@@ -738,12 +779,38 @@ function bind(){
     if(btn){btn.style.opacity='0.5';btn.style.pointerEvents='none';}
     try{
       const count=await fetchSheetData(ST.sel,m.sheetUrl);
+      // โหลด summary ด้วยถ้าอยู่หน้า dash
+      if(ST.tab==='dash'){
+        ST.summaryLoading=true;render();
+        ST.summary=await fetchSummary(m.sheetUrl,ST.period);
+        ST.summaryLoading=false;
+      }
       render();
       showToast(`✅ อัปเดตแล้ว ${count} รายการ`,'success');
     }catch(err){
       showToast('❌ '+err.message,'error');
       if(btn){btn.style.opacity='1';btn.style.pointerEvents='auto';}
     }
+  });
+
+  // period selector
+  document.querySelectorAll('.period-btn').forEach(el=>el.addEventListener('click',async()=>{
+    ST.period=el.dataset.period;
+    const m=selM();
+    if(m&&m.sheetUrl){
+      ST.summaryLoading=true;render();
+      ST.summary=await fetchSummary(m.sheetUrl,ST.period);
+      ST.summaryLoading=false;
+    }
+    render();
+  }));
+
+  // load summary button
+  on('btn-load-summary','click',async()=>{
+    const m=selM();if(!m||!m.sheetUrl)return;
+    ST.summaryLoading=true;render();
+    ST.summary=await fetchSummary(m.sheetUrl,ST.period);
+    ST.summaryLoading=false;render();
   });
   on('logout','click',()=>{ST.in=false;ST.pw='';ST.view='fleet';render()});
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render()});

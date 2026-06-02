@@ -290,15 +290,36 @@ function productsToSlots(products) {
 
 // ดึงข้อมูลผ่าน Apps Script URL
 async function fetchSheetData(machineId, gasUrl) {
-  if (!gasUrl || !gasUrl.includes("script.google.com")) {
-    throw new Error("ต้องใส่ Apps Script URL (ดูวิธีด้านล่าง)");
+  if (!gasUrl || !gasUrl.trim()) {
+    throw new Error("กรุณาใส่ URL");
   }
-  const url = gasUrl.trim() + "?action=products";
-  const res = await fetch(url, {cache: "no-store"});
-  if (!res.ok) throw new Error("เชื่อมต่อไม่ได้ (HTTP " + res.status + ")");
-  const json = await res.json();
+  const url = gasUrl.trim();
+  // ต่อ ?action=products (รองรับ URL มี / ท้ายหรือไม่มีก็ได้)
+  const fetchUrl = url.includes("?") ? url + "&action=products" : url + "?action=products";
+  
+  let res;
+  try {
+    res = await fetch(fetchUrl, {
+      method: "GET",
+      redirect: "follow",   // ← สำคัญมาก! Apps Script ใช้ redirect
+      cache: "no-store",
+    });
+  } catch(e) {
+    throw new Error("เชื่อมต่อไม่ได้: " + e.message + "\n(ตรวจสอบ internet หรือ CORS)");
+  }
+  
+  if (!res.ok) throw new Error("HTTP " + res.status + " — ตรวจสอบ URL อีกครั้ง");
+  
+  let json;
+  try {
+    json = await res.json();
+  } catch(e) {
+    throw new Error("URL นี้ไม่ใช่ Apps Script หรือยังไม่ได้ Deploy");
+  }
+  
   if (!json.ok) throw new Error(json.error || "Apps Script ตอบกลับผิดพลาด");
-  if (!json.products || !json.products.length) throw new Error("ไม่พบข้อมูลสินค้า");
+  if (!json.products || !json.products.length) throw new Error("ไม่พบข้อมูลสินค้าใน Sheet");
+  
   const slots = productsToSlots(json.products);
   const now = new Date().toLocaleTimeString("th-TH", {hour:"2-digit", minute:"2-digit"});
   ST.machines = ST.machines.map(m =>
@@ -311,6 +332,39 @@ function ci(m){return m.slots.reduce((a,s)=>a+s.c,0)}
 function tm(m){return m.slots.reduce((a,s)=>a+s.mx,0)}
 function rf(m){return m.slots.reduce((a,s)=>a+(s.mx-s.c),0)}
 function selM(){return ST.machines.find(m=>m.id===ST.sel)}
+
+// ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
+function showToast(msg, type='info', onConfirm=null){
+  // ลบ toast เก่า
+  const old=document.getElementById('toast-wrap');
+  if(old)old.remove();
+
+  const wrap=document.createElement('div');
+  wrap.id='toast-wrap';
+  wrap.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none';
+
+  if(type==='confirm'&&onConfirm){
+    wrap.style.pointerEvents='auto';
+    wrap.innerHTML=`
+      <div style="background:#0f172a;border:1px solid rgba(59,130,246,0.4);border-radius:14px;padding:14px 18px;box-shadow:0 8px 30px rgba(0,0,0,0.5);min-width:260px;text-align:center">
+        <div style="font-size:13px;color:#e2e8f0;margin-bottom:12px;font-weight:500">${msg}</div>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button id="toast-cancel" style="padding:8px 18px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px;font-family:'Sarabun',sans-serif">ยกเลิก</button>
+          <button id="toast-ok" style="padding:8px 18px;border-radius:8px;border:none;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:'Sarabun',sans-serif">ยืนยัน</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    document.getElementById('toast-ok').onclick=()=>{wrap.remove();onConfirm();};
+    document.getElementById('toast-cancel').onclick=()=>wrap.remove();
+  } else {
+    const bg=type==='success'?'rgba(34,197,94,0.15)':type==='error'?'rgba(239,68,68,0.15)':'rgba(59,130,246,0.15)';
+    const bc=type==='success'?'rgba(34,197,94,0.4)':type==='error'?'rgba(239,68,68,0.4)':'rgba(59,130,246,0.4)';
+    const tc=type==='success'?'#22c55e':type==='error'?'#ef4444':'#38bdf8';
+    wrap.innerHTML=`<div style="background:${bg};border:1px solid ${bc};border-radius:10px;padding:10px 20px;color:${tc};font-size:13px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.3)">${msg}</div>`;
+    document.body.appendChild(wrap);
+    setTimeout(()=>wrap.remove(),2500);
+  }
+}
 
 function render(){
   const R=document.getElementById("R");if(!R)return;
@@ -326,12 +380,15 @@ function render(){
 
 function topbarHTML(){
   const onl=ST.machines.filter(m=>m.on).length;
+  const m=selM();
+  const showRefresh=ST.view==='detail'&&m&&m.sheetUrl;
   return `<div class="topbar">
     <div class="tb-logo">
       <img src="${LOGO}" alt="LAUM">
       <div><div class="tb-title">LAUM Vending</div><div class="tb-sub">Vending Network</div></div>
     </div>
     <div class="tb-right">
+      ${showRefresh?`<button class="tb-btn" id="btn-refresh" style="display:flex;align-items:center;gap:5px;color:var(--primary);border-color:rgba(59,130,246,0.3)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>รีเฟรช</button>`:''}
       <div class="tb-stat"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>${onl}/${ST.machines.length} ONLINE</div>
       <button class="tb-btn" id="logout">ออก</button>
     </div>
@@ -436,11 +493,58 @@ function detailHTML(m){
     </div>`;
   if(ST.tab==="dash"){
     const mxs=Math.max(...SALES);
+    // คำนวณต้นทุน/กำไรจากสต็อกที่ขายไปแล้ว (max - current = ขายออกไป)
+    const totalCostStock = m.slots.reduce((a,s)=>a+(s.cost||0)*s.mx,0);       // ต้นทุนทั้งหมดที่ลงทุน
+    const totalCostSold  = m.slots.reduce((a,s)=>a+(s.cost||0)*(s.mx-s.c),0); // ต้นทุนที่ขายออกไปแล้ว
+    const totalRevSold   = m.slots.reduce((a,s)=>a+s.p*(s.mx-s.c),0);         // รายรับจากที่ขายไปแล้ว
+    const totalProfit    = totalRevSold - totalCostSold;                         // กำไรสุทธิ
+    const totalCostRemain= m.slots.reduce((a,s)=>a+(s.cost||0)*s.c,0);         // ต้นทุนสต็อกที่เหลือ
+
     h+=`<div class="kpis">
       <div class="kpi" style="--c:var(--success)"><div class="kpi-ic" style="color:var(--success)">${ICON.revenue}</div><div class="kpi-v" style="color:var(--success)">฿${m.rev.toLocaleString()}</div><div class="kpi-l">รายได้วันนี้</div></div>
       <div class="kpi" style="--c:var(--primary)"><div class="kpi-ic" style="color:var(--primary)">${ICON.sales}</div><div class="kpi-v" style="color:var(--primary)">${m.sold}</div><div class="kpi-l">ขวดที่ขาย</div></div>
       <div class="kpi" style="--c:#a78bfa"><div class="kpi-ic" style="color:#a78bfa">${ICON.stock}</div><div class="kpi-v" style="color:#a78bfa">${ti}/${to}</div><div class="kpi-l">สต็อกคงเหลือ</div></div>
       <div class="kpi" style="--c:var(--accent)"><div class="kpi-ic" style="color:var(--accent)">${ICON.refill}</div><div class="kpi-v" style="color:var(--accent)">${tr}</div><div class="kpi-l">ต้องเติม</div></div>
+    </div>
+
+    <!-- สรุปการเงิน -->
+    <div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:2px">
+      <div style="font-size:11px;color:var(--text-mute);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px">สรุปการเงิน (จากสต็อกที่ขายออกไปแล้ว)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+        <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:11px;padding:12px;text-align:center">
+          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">รายรับรวม</div>
+          <div style="font-size:17px;font-weight:700;color:var(--success);font-family:'Space Grotesk',monospace">฿${Math.round(totalRevSold).toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:11px;padding:12px;text-align:center">
+          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">ต้นทุนรวม</div>
+          <div style="font-size:17px;font-weight:700;color:var(--danger);font-family:'Space Grotesk',monospace">฿${Math.round(totalCostSold).toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.2);border-radius:11px;padding:12px;text-align:center">
+          <div style="font-size:10px;color:var(--text-mute);margin-bottom:5px;letter-spacing:0.5px">กำไรสุทธิ</div>
+          <div style="font-size:17px;font-weight:700;color:var(--accent);font-family:'Space Grotesk',monospace">฿${Math.round(totalProfit).toLocaleString()}</div>
+        </div>
+      </div>
+      <!-- profit bar -->
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:10px;color:var(--text-mute)">อัตรากำไร</span>
+          <span style="font-size:11px;font-weight:700;color:var(--accent)">${totalRevSold>0?Math.round(totalProfit/totalRevSold*100):0}%</span>
+        </div>
+        <div style="background:rgba(0,0,0,0.3);border-radius:4px;height:6px;overflow:hidden">
+          <div style="height:100%;width:${totalRevSold>0?Math.min(100,Math.round(totalProfit/totalRevSold*100)):0}%;background:linear-gradient(90deg,var(--accent),var(--success));border-radius:4px"></div>
+        </div>
+      </div>
+      <!-- breakdown -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--text-mute)">ต้นทุนสต็อกที่เหลือ</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text-dim)">฿${Math.round(totalCostRemain).toLocaleString()}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--text-mute)">ต้นทุนลงทุนรวม</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text-dim)">฿${Math.round(totalCostStock).toLocaleString()}</span>
+        </div>
+      </div>
     </div>`;
     if(alerts.length||lows.length){
       h+=`<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px">`;
@@ -531,7 +635,7 @@ function detailHTML(m){
         </div>
         <div style="text-align:center;color:${r>0?'var(--primary)':'var(--success)'};font-size:14px;font-weight:700">${r>0?'+'+r:'✓'}</div>
         <div style="text-align:center">
-          <button class="btn-reset" data-slot="${s.s}" data-max="${s.mx}" title="รีเซ็ทช่อง ${s.s} → ${s.mx}/${s.mx}">
+          <button class="btn-reset" data-slot="${s.s}" data-max="${s.mx}" data-name="${s.n}" title="รีเซ็ทช่อง ${s.s}">
             ${ICON.cycle}
           </button>
         </div>
@@ -627,6 +731,20 @@ function bind(){
   on('pwi','input',e=>{ST.pw=e.target.value;ST.err=false});
   on('pwi','keydown',e=>{if(e.key==='Enter')doLogin()});
   on('lbtn','click',doLogin);
+  on('btn-refresh','click',async()=>{
+    const m=selM();
+    if(!m||!m.sheetUrl)return;
+    const btn=document.getElementById('btn-refresh');
+    if(btn){btn.style.opacity='0.5';btn.style.pointerEvents='none';}
+    try{
+      const count=await fetchSheetData(ST.sel,m.sheetUrl);
+      render();
+      showToast(`✅ อัปเดตแล้ว ${count} รายการ`,'success');
+    }catch(err){
+      showToast('❌ '+err.message,'error');
+      if(btn){btn.style.opacity='1';btn.style.pointerEvents='auto';}
+    }
+  });
   on('logout','click',()=>{ST.in=false;ST.pw='';ST.view='fleet';render()});
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render()});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
@@ -681,36 +799,39 @@ function bind(){
   document.querySelectorAll('#mc').forEach(el=>el.addEventListener('click',()=>{ST.modal='';ST.imgSlot=null;ST.imgInput='';render()}));
 
   // ── Reset slot buttons (หน้าการเติม) ──
-  document.querySelectorAll('.btn-reset').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('.btn-reset').forEach(el=>el.addEventListener('click',e=>{
+    e.stopPropagation();
     const slot=parseInt(el.dataset.slot);
     const max=parseInt(el.dataset.max);
-    if(!confirm(`รีเซ็ทช่อง ${slot} → ${max}/${max} ขวด?\n(กดตกลงเมื่อเติมสินค้าแล้ว)`))return;
-    // อัปเดต local state
-    ST.machines=ST.machines.map(m=>m.id===ST.sel?{...m,slots:m.slots.map(s=>s.s===slot?{...s,c:max}:s)}:m);
-    saveState();
-    render();
-    // ยิง Apps Script ถ้าตั้งค่าไว้
-    const machine=selM();
-    if(machine&&machine.sheetUrl&&machine.sheetUrl.includes("script.google.com")){
-      fetch(machine.sheetUrl,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({action:"refill",machineId:machine.id,slot})}).catch(()=>{});
-    }
+    const name=el.dataset.name||('ช่อง '+slot);
+    // แสดง toast confirm
+    showToast(`รีเซ็ท ${name} → ${max}/${max} ?`, 'confirm', ()=>{
+      ST.machines=ST.machines.map(m=>m.id===ST.sel?{...m,slots:m.slots.map(s=>s.s===slot?{...s,c:max}:s)}:m);
+      saveState(); render();
+      const mc=selM();
+      if(mc&&mc.sheetUrl){
+        fetch(mc.sheetUrl+(mc.sheetUrl.includes('?')?'&action=refill':'?action=noop'),
+          {method:"POST",redirect:"follow",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"refill",machineId:mc.id,slot})}).catch(()=>{});
+      }
+      showToast(`✅ ช่อง ${slot} รีเซ็ทแล้ว`,'success');
+    });
   }));
 
   // ── Reset ALL button ──
   on('reset-all','click',()=>{
-    const m=selM();
-    if(!m)return;
+    const m=selM(); if(!m)return;
     const count=m.slots.filter(s=>s.mx-s.c>0).length;
-    if(!confirm(`รีเซ็ทสต็อกทั้งหมด ${count} รายการ?\n(กดตกลงเมื่อเติมสินค้าครบแล้ว)`))return;
-    ST.machines=ST.machines.map(mc=>mc.id===ST.sel?{...mc,slots:mc.slots.map(s=>({...s,c:s.mx}))}:mc);
-    saveState();
-    render();
-    // ยิง Apps Script
-    if(m.sheetUrl&&m.sheetUrl.includes("script.google.com")){
-      fetch(m.sheetUrl,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({action:"refill_all",machineId:m.id})}).catch(()=>{});
-    }
+    showToast(`รีเซ็ทสต็อกทั้งหมด ${count} รายการ?`,'confirm',()=>{
+      ST.machines=ST.machines.map(mc=>mc.id===ST.sel?{...mc,slots:mc.slots.map(s=>({...s,c:s.mx}))}:mc);
+      saveState(); render();
+      if(m.sheetUrl){
+        fetch(m.sheetUrl+(m.sheetUrl.includes('?')?'&action=refill_all':'?action=noop'),
+          {method:"POST",redirect:"follow",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"refill_all",machineId:m.id})}).catch(()=>{});
+      }
+      showToast('✅ รีเซ็ทสต็อกทั้งหมดแล้ว','success');
+    });
   });
 }
 

@@ -180,6 +180,32 @@ textarea{resize:none;font-family:monospace;font-size:11px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
+@media print {
+  @page { size: 58mm auto; margin: 0; }
+  html, body { background: #fff !important; color: #000 !important; }
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; color: #000 !important; }
+  #print-area {
+    position: absolute; left: 0; top: 0;
+    width: 58mm; padding: 4mm 3mm;
+    background: #fff; color: #000;
+    font-family: 'Sarabun', sans-serif;
+    font-size: 12px; line-height: 1.4;
+  }
+  .pr-title { text-align: center; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  .pr-sub { text-align: center; font-size: 11px; margin-top: 2px; }
+  .pr-divider { border-top: 1.5px dashed #000; margin: 6px 0; }
+  .pr-hr { display: grid; grid-template-columns: 32px 1fr 30px; gap: 4px; font-size: 10px; font-weight: 700; padding-bottom: 2px; border-bottom: 1px solid #000; margin-bottom: 3px; }
+  .pr-row { display: grid; grid-template-columns: 32px 1fr 30px; gap: 4px; font-size: 11px; padding: 2px 0; }
+  .pr-row .s { font-weight: 700; }
+  .pr-row .n { overflow: hidden; word-wrap: break-word; line-height: 1.3; }
+  .pr-row .q { text-align: right; font-weight: 800; font-size: 12px; }
+  .pr-row.urg { background: #000; color: #fff !important; padding: 2px 3px; }
+  .pr-row.urg * { color: #fff !important; }
+  .pr-total { text-align: center; font-weight: 800; margin-top: 6px; font-size: 13px; }
+  .pr-foot { text-align: center; font-size: 10px; margin-top: 8px; }
+}
+
 @media(max-width:700px){
   .orbital-stage{width:92vw;height:92vw}
   .orbital-ring.r1{width:55vw;height:55vw}
@@ -694,15 +720,20 @@ function detailHTML(m){
     const needCount=m.slots.filter(s=>s.mx-s.c>0).length;
     h+=`<div style="display:flex;flex-direction:column;gap:7px">
 
-      <!-- ปุ่มรีเซ็ททั้งหมด -->
-      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px">
+      <!-- ปุ่มรีเซ็ททั้งหมด + ปริ้นต์ -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px;gap:8px;flex-wrap:wrap">
         <div>
           <div style="font-size:14px;font-weight:700">สรุปการเติมรอบนี้</div>
           <div style="font-size:11px;color:var(--text-mute);margin-top:2px">${needCount} รายการ · ต้องเติม ${total} ขวด</div>
         </div>
-        <button class="btn pri" id="reset-all" style="padding:9px 16px;font-size:12px;display:flex;align-items:center;gap:6px">
-          ${ICON.cycle}<span>รีเซ็ทสต็อกทั้งหมด</span>
-        </button>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="btn-print" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(34,197,94,0.4);color:#22c55e;background:rgba(34,197,94,0.08)">
+            🖨️<span>ปริ้นต์รายการ</span>
+          </button>
+          <button class="btn pri" id="reset-all" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px">
+            ${ICON.cycle}<span>รีเซ็ททั้งหมด</span>
+          </button>
+        </div>
       </div>
 
       <!-- header -->
@@ -939,6 +970,11 @@ function bind(){
     });
   }));
 
+  // ── Print refill list (Sunmi 58mm thermal) ──
+  on('btn-print','click',()=>{
+    printRefillList();
+  });
+
   // ── Reset ALL button ──
   on('reset-all','click',()=>{
     const m=selM(); if(!m)return;
@@ -954,6 +990,65 @@ function bind(){
       showToast('✅ รีเซ็ทสต็อกทั้งหมดแล้ว','success');
     });
   });
+}
+
+// ── ปริ้นต์รายการสินค้าที่ต้องเติม (Sunmi V2 Pro / thermal 58mm) ──
+function printRefillList(){
+  const m=selM(); if(!m){showToast('ไม่พบตู้','error');return;}
+  const items=m.slots.filter(s=>s.mx-s.c>0).sort((a,b)=>(b.mx-b.c)-(a.mx-a.c));
+  if(!items.length){showToast('ไม่มีรายการที่ต้องเติม','info');return;}
+
+  const totalBottles=items.reduce((a,s)=>a+(s.mx-s.c),0);
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('th-TH',{year:'2-digit',month:'2-digit',day:'2-digit'})+' '+
+                now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+
+  const rows=items.map(s=>{
+    const refill=s.mx-s.c;
+    const urgent=s.c===0; // ช่องหมด — เน้นพื้นดำ
+    return `<div class="pr-row${urgent?' urg':''}">
+      <span class="s">${String(s.s).padStart(2,'0')}</span>
+      <span class="n">${s.n}</span>
+      <span class="q">+${refill}</span>
+    </div>`;
+  }).join('');
+
+  // ลบ print-area เก่า (ถ้ามี)
+  const old=document.getElementById('print-area');
+  if(old)old.remove();
+
+  const div=document.createElement('div');
+  div.id='print-area';
+  div.innerHTML=`
+    <div class="pr-title">LAUM VENDING</div>
+    <div class="pr-sub">${m.name}</div>
+    <div class="pr-sub">📍 ${m.loc}</div>
+    <div class="pr-sub">${dateStr}</div>
+    <div class="pr-divider"></div>
+    <div class="pr-hr">
+      <span>ช่อง</span>
+      <span>สินค้า</span>
+      <span style="text-align:right">เติม</span>
+    </div>
+    ${rows}
+    <div class="pr-divider"></div>
+    <div class="pr-total">รวม ${items.length} รายการ</div>
+    <div class="pr-total">${totalBottles} ขวด</div>
+    <div class="pr-foot">--- จบรายการ ---</div>
+  `;
+  document.body.appendChild(div);
+
+  // print + cleanup
+  const cleanup=()=>{
+    const pa=document.getElementById('print-area');
+    if(pa)pa.remove();
+    window.removeEventListener('afterprint',cleanup);
+  };
+  window.addEventListener('afterprint',cleanup);
+  // fallback (บางมือถือไม่ fire afterprint)
+  setTimeout(cleanup,3000);
+
+  window.print();
 }
 
 function doLogin(){

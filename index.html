@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="LAUM Vending">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0e1a">
-<link id="favicon" rel="icon" type="image/png">
+<link rel="icon" type="image/png" href="logo.png">
 <link rel="apple-touch-icon" href="logophone.png">
 <link rel="apple-touch-startup-image" href="logophone.png">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -193,7 +193,7 @@ textarea{resize:none;font-family:monospace;font-size:11px}
 <body>
 <div id="R"></div>
 <script>
-const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAIAAAD2HxkiAAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAEAAElEQVR42rz9d7Qt13kfCH6/b++qc85NLz/iIWcQAEGCYKaYRIqiJFOicqAt0ZJsydbYPe32OGjNeFav7mV298iedge3w1i2l3rZ05YlNxVoSZaVKFEiKTCCIEBk4AF4+caTqmrv7zd/7Ko6dcJ9eKCveboLurzh3DpV+9v7C7+AyCCdfyqu/Zw0EQIQETEViqgQEkUosfl5dQJhSVaBDG59W/Dw0y9/8ovPPvnSwbAIGGyU6E/pomSqmaqHBSGrKhRFNRqNiqKaTItiWgQzitAoJCX9R0QEqpKuYe4fSQJa/wyQfh6AQAgRQecnpfmWzn4/fYUiEIgImL6aXiF9zvk/3PwKKQKFACRpps4pICKkKMTE2ktK10QS5OzPpU9EBGIk0bn+5rLTm5hdebcZScht";
+const LOGO="logo.png";
 const ICON={
   revenue:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
   sales:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
@@ -206,9 +206,6 @@ const ICON={
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>'
 };
-
-// Embed logo as favicon (auto-set on page load)
-(function(){var f=document.getElementById('favicon');if(f)f.href=LOGO;})();
 
 const PASS="laum320758";
 const DEFAULT_SLOTS=[

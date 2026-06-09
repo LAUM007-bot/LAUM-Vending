@@ -27,7 +27,8 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .lcard{background:rgba(15,23,42,0.7);backdrop-filter:blur(24px);border:1px solid rgba(59,130,246,0.2);border-radius:24px;padding:40px;width:100%;max-width:380px;box-shadow:0 30px 80px rgba(0,0,0,0.5),0 0 60px rgba(59,130,246,0.1);position:relative;overflow:hidden}
 .lcard::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#3b82f6,transparent)}
 .llogo{display:flex;justify-content:center;margin-bottom:20px}
-.llogo img{width:110px;height:110px;border-radius:22px;box-shadow:0 12px 40px rgba(59,130,246,0.3);object-fit:cover;display:block}
+.llogo-box{width:110px;height:110px;border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(59,130,246,0.3);background:#0f172a;position:relative}
+.llogo-box img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.5);transform-origin:center}
 .ltitle{text-align:center;font-size:24px;font-weight:700;letter-spacing:1px;margin-bottom:6px;background:linear-gradient(135deg,#fff 30%,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .lsubtitle{text-align:center;font-size:11px;color:var(--text-mute);margin-bottom:32px;letter-spacing:2px;text-transform:uppercase}
 .linput{width:100%;padding:15px 18px;background:rgba(255,255,255,0.03);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:18px;outline:none;font-family:'Space Grotesk',monospace;letter-spacing:8px;text-align:center;transition:all .25s;margin-bottom:16px;caret-color:var(--primary)}.linput::placeholder{letter-spacing:6px;font-size:14px;color:var(--text-mute)}
@@ -41,7 +42,8 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 
 .topbar{border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;background:rgba(10,14,26,0.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
 .tb-logo{display:flex;align-items:center;gap:10px}
-.tb-logo img{width:36px;height:36px;border-radius:9px;object-fit:cover;display:block}
+.tb-logo-img{width:36px;height:36px;border-radius:9px;overflow:hidden;flex-shrink:0;background:#0f172a}
+.tb-logo-img img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.4);transform-origin:center}
 .tb-title{font-weight:700;font-size:15px;letter-spacing:1px}
 .tb-sub{font-size:9px;color:var(--text-mute);letter-spacing:1.5px;text-transform:uppercase}
 .tb-right{display:flex;align-items:center;gap:10px}
@@ -69,7 +71,7 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .orbital-center::before{content:'';position:absolute;inset:-10px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.15) 0%,transparent 70%);animation:pulse 3s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.3);opacity:.2}}
 .orbital-hub{width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-2));display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(59,130,246,0.5);overflow:hidden}
-.orbital-hub img{width:70px;height:70px;border-radius:14px;object-fit:cover;display:block}
+.orbital-hub img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;transform:scale(1.3);transform-origin:center}
 
 .orbit-system{position:absolute;width:100%;height:100%;animation:orbit-rotate 60s linear infinite}.orbital-stage:hover .orbit-system,.orbital-stage:hover .machine-node{animation-play-state:paused}
 @keyframes orbit-rotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
@@ -245,8 +247,14 @@ const SALES=[3,7,5,12,18,14,9,11,8];
 function loadState(){try{const s=localStorage.getItem("laum-vending-v6");if(s)return JSON.parse(s);}catch(e){}return null;}
 function saveState(){try{localStorage.setItem("laum-vending-v6",JSON.stringify({machines:ST.machines}));}catch(e){}}
 
+// ── Login persistence (5 นาที sliding window) ───────────────
+const LOGIN_TTL=5*60*1000;
+function isLoggedInPersist(){try{const d=JSON.parse(localStorage.getItem("laum-login")||"null");return !!(d&&d.ts&&(Date.now()-d.ts<LOGIN_TTL));}catch(e){return false;}}
+function saveLoginPersist(){try{localStorage.setItem("laum-login",JSON.stringify({ts:Date.now()}));}catch(e){}}
+function clearLoginPersist(){try{localStorage.removeItem("laum-login");}catch(e){}}
+
 let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:0,sold:0,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
-ST.in=false;ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
+ST.in=isLoggedInPersist();ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
 ST.af={name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
 ST.period="today";
 ST.summary=null;
@@ -425,6 +433,7 @@ async function loadFleetSummary(){
 
 function render(){
   const R=document.getElementById("R");if(!R)return;
+  if(ST.in)saveLoginPersist(); // sliding window: ต่อเวลาทุก render
   if(!ST.in){R.innerHTML=loginHTML();bind();return}
   let html="";
   if(ST.modal)html+=modalHTML();
@@ -441,7 +450,7 @@ function topbarHTML(){
   const showRefresh=ST.view==='detail'&&m&&m.sheetUrl;
   return `<div class="topbar">
     <div class="tb-logo">
-      <img src="${LOGO}" alt="LAUM">
+      <div class="tb-logo-img"><img src="${LOGO}" alt="LAUM"></div>
       <div><div class="tb-title">LAUM Vending</div><div class="tb-sub">Vending Network</div></div>
     </div>
     <div class="tb-right">
@@ -458,7 +467,7 @@ function loginHTML(){
   <div class="login-overlay"></div>
   <div class="login-grid"></div>
   <div class="lwrap"><div class="lcard">
-    <div class="llogo"><img src="${LOGO}" alt="LAUM Vending"></div>
+    <div class="llogo"><div class="llogo-box"><img src="${LOGO}" alt="LAUM Vending"></div></div>
     <div class="ltitle">LAUM VENDING</div>
     <div class="lsubtitle">CEO ACCESS · v1.0</div>
     <input id="pwi" type="password" placeholder="รหัสผ่าน" class="linput ${ST.err?'err':''}">
@@ -857,7 +866,7 @@ function bind(){
     ST.summary=await fetchSummary(m.sheetUrl,ST.period);
     ST.summaryLoading=false;render();
   });
-  on('logout','click',()=>{ST.in=false;ST.pw='';ST.view='fleet';render()});
+  on('logout','click',()=>{ST.in=false;ST.pw='';ST.view='fleet';clearLoginPersist();render()});
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
@@ -948,7 +957,7 @@ function bind(){
 }
 
 function doLogin(){
-  if(ST.pw===PASS){ST.in=true;ST.err=false;setTimeout(loadFleetSummary,500);}
+  if(ST.pw===PASS){ST.in=true;ST.err=false;saveLoginPersist();setTimeout(loadFleetSummary,500);}
   else ST.err=true;
   render();
 }
@@ -959,6 +968,7 @@ window.addEventListener('resize',()=>{
   resizeTimer=setTimeout(()=>{if(ST.in&&ST.view==='fleet')render()},200);
 });
 render();
+if(ST.in)setTimeout(loadFleetSummary,500); // auto-load fleet summary ถ้ายัง login อยู่
 </script>
 </body>
 </html>

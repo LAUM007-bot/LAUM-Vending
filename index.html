@@ -995,7 +995,7 @@ function bind(){
 // ── ปริ้นต์รายการสินค้าที่ต้องเติม (Sunmi V2 Pro / thermal 58mm) ──
 function printRefillList(){
   const m=selM(); if(!m){showToast('ไม่พบตู้','error');return;}
-  const items=m.slots.filter(s=>s.mx-s.c>0).sort((a,b)=>(b.mx-b.c)-(a.mx-a.c));
+  const items=m.slots.filter(s=>s.mx-s.c>0).sort((a,b)=>(+a.s)-(+b.s));
   if(!items.length){showToast('ไม่มีรายการที่ต้องเติม','info');return;}
 
   const totalBottles=items.reduce((a,s)=>a+(s.mx-s.c),0);

@@ -1003,6 +1003,29 @@ function printRefillList(){
   const dateStr=now.toLocaleDateString('th-TH',{year:'2-digit',month:'2-digit',day:'2-digit'})+' '+
                 now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
 
+  // ── ถ้ารันในแอป Android (Sunmi V2 Pro) → ส่งให้ native printer แทน window.print() ──
+  if(window.AndroidPrinter&&typeof window.AndroidPrinter.printReceipt==='function'){
+    const payload={
+      machineName:m.name,
+      location:m.loc,
+      datetime:dateStr,
+      totalItems:items.length,
+      totalBottles:totalBottles,
+      items:items.map(s=>({
+        slot:String(s.s).padStart(2,'0'),
+        name:s.n,
+        qty:s.mx-s.c,
+        urgent:s.c===0
+      }))
+    };
+    try{
+      window.AndroidPrinter.printReceipt(JSON.stringify(payload));
+    }catch(e){
+      showToast('ปริ้นต์ผิดพลาด: '+e,'error');
+    }
+    return; // ไม่ต้องทำ window.print() ต่อ
+  }
+
   const rows=items.map(s=>{
     const refill=s.mx-s.c;
     const urgent=s.c===0; // ช่องหมด — เน้นพื้นดำ

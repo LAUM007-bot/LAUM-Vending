@@ -232,7 +232,8 @@ const ICON={
   cycle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>',
   alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>'
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
+  warehouse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/></svg>'
 };
 
 const PASS="laum320758";
@@ -286,6 +287,8 @@ ST.period="today";
 ST.summary=null;
 ST.summaryLoading=false;
 ST.fleetSummary=null; // สรุปรวมทุกตู้ (จาก log) — รายสัปดาห์
+ST.warehouse=null;       // สต็อกโกดัง (จาก action=warehouse)
+ST.warehouseLoading=false;
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -401,6 +404,27 @@ async function fetchSummary(gasUrl, period, machineId){
     const json=await res.json();
     return json.ok?json:null;
   }catch(e){return null;}
+}
+
+// ── ดึงสต็อกโกดัง (action=warehouse) ────────────────────────────────────
+async function fetchWarehouse(gasUrl){
+  if(!gasUrl||!gasUrl.trim())return null;
+  let url=gasUrl.trim()+(gasUrl.includes('?')?'&':'?')+'action=warehouse';
+  try{
+    const res=await fetch(url,{method:"GET",redirect:"follow",cache:"no-store"});
+    if(!res.ok)return null;
+    const json=await res.json();
+    return json.ok?json:null;
+  }catch(e){return null;}
+}
+async function loadWarehouse(){
+  // โกดังเป็นคลังกลาง — ใช้ Apps Script เดียวกับตู้ปัจจุบัน (fallback: ตู้แรกที่มี URL)
+  const m=selM();
+  const url=(m&&m.sheetUrl&&m.sheetUrl.trim())||((ST.machines.find(x=>x.sheetUrl&&x.sheetUrl.trim())||{}).sheetUrl||'');
+  if(!url)return;
+  ST.warehouseLoading=true;render();
+  ST.warehouse=await fetchWarehouse(url);
+  ST.warehouseLoading=false;render();
 }
 
 // ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
@@ -593,7 +617,7 @@ function detailHTML(m){
       </div>
     </div>
     <div class="tabs">
-      ${['dash','stock','refill'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle][i]}${['แดชบอร์ด','สต็อก','การเติม'][i]}</button>`).join('')}
+      ${['dash','stock','refill','wh'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
     // สต็อก KPI (จาก Sheet ปัจจุบัน)
@@ -769,6 +793,74 @@ function detailHTML(m){
     });
     h+=`</div>`;
   }
+  if(ST.tab==="wh"){
+    const wh=ST.warehouse, m2=selM();
+    h+=`<div style="display:flex;flex-direction:column;gap:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(168,139,250,0.06);border:1px solid rgba(168,139,250,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:700">📦 สต็อกโกดัง</div>
+          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">คลังกลาง · นับเป็นขวด แสดงเป็นลัง</div>
+        </div>
+        <button class="btn" id="btn-wh-refresh" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(168,139,250,0.4);color:#a78bfa;background:rgba(168,139,250,0.08)">${ICON.cycle}<span>รีเฟรช</span></button>
+      </div>`;
+    if(ST.warehouseLoading){
+      h+=`<div style="text-align:center;padding:24px;color:var(--text-mute);font-size:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;margin:0 auto 6px;display:block"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>กำลังดึงข้อมูลโกดัง...</div>`;
+    } else if(!m2||!m2.sheetUrl){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">⚠️ เชื่อม Apps Script ก่อนเพื่อดูสต็อกโกดัง</div>`;
+    } else if(!wh){
+      h+=`<div style="text-align:center;padding:16px"><button class="btn pri" id="btn-wh-load" style="font-size:12px;padding:9px 18px">ดึงข้อมูลโกดัง</button></div>`;
+    } else if(!wh.products||!wh.products.length){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">📭 ยังไม่มีสินค้าในโกดัง<br><span style="font-size:10px">เพิ่มของผ่านการถ่ายบิล (LINE bot) หรือใส่ใน Sheet "Warehouse"</span></div>`;
+    } else {
+      const totalVal=wh.products.reduce((a,p)=>a+p.bottles*p.costPerBottle,0);
+      const totalBottles=wh.products.reduce((a,p)=>a+p.bottles,0);
+      const lowCount=wh.products.filter(p=>p.bottles<p.bottlesPerPack).length;
+      h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:4px">
+        <div style="background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">ชนิดสินค้า</div>
+          <div style="font-size:19px;font-weight:800;color:#a78bfa;font-family:'Space Grotesk',monospace">${wh.products.length}</div>
+        </div>
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">รวมขวด</div>
+          <div style="font-size:19px;font-weight:800;color:var(--primary);font-family:'Space Grotesk',monospace">${totalBottles.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">มูลค่าโกดัง</div>
+          <div style="font-size:19px;font-weight:800;color:var(--warning);font-family:'Space Grotesk',monospace">฿${Math.round(totalVal).toLocaleString()}</div>
+        </div>
+      </div>`;
+      if(lowCount){
+        h+=`<div class="alert" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:var(--danger);margin-bottom:4px">${ICON.alert}<span>${lowCount} ชนิดเหลือต่ำกว่า 1 ลัง — ควรสั่งของเพิ่ม</span></div>`;
+      }
+      h+=`<div class="rfrow hdr" style="grid-template-columns:2fr 1.2fr 1fr 1fr">
+        <span>สินค้า</span>
+        <span style="text-align:center">คงเหลือ</span>
+        <span style="text-align:center">ต้นทุน/ขวด</span>
+        <span style="text-align:right">มูลค่า</span>
+      </div>`;
+      wh.products.forEach(p=>{
+        const low=p.bottles<p.bottlesPerPack;
+        const crateStr=p.packs>0?(p.packs+' ลัง'+(p.remainder>0?(' '+p.remainder+' ขวด'):'')):(p.bottles+' ขวด');
+        const val=p.bottles*p.costPerBottle;
+        h+=`<div class="rfrow${low?' urg':''}" style="grid-template-columns:2fr 1.2fr 1fr 1fr">
+          <div>
+            <div style="font-size:12px;font-weight:600">${p.name}</div>
+            <div style="font-size:10px;color:var(--text-mute);margin-top:2px">${p.bottlesPerPack} ขวด/ลัง</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:13px;font-weight:700;color:${low?'var(--danger)':'var(--success)'}">${crateStr}</div>
+            <div style="font-size:10px;color:var(--text-mute)">${p.bottles} ขวด</div>
+          </div>
+          <div style="text-align:center;font-size:12px;color:var(--text-dim)">฿${(p.costPerBottle||0).toFixed(2)}</div>
+          <div style="text-align:right;font-size:13px;font-weight:700;color:var(--warning);font-family:'Space Grotesk',monospace">฿${Math.round(val).toLocaleString()}</div>
+        </div>`;
+      });
+      if(wh.updatedAt){
+        h+=`<div style="text-align:center;font-size:10px;color:var(--text-mute);margin-top:8px">อัปเดต ${new Date(wh.updatedAt).toLocaleString('th-TH')}</div>`;
+      }
+    }
+    h+=`</div>`;
+  }
   h+=`</div>`;
   return h;
 }
@@ -901,7 +993,7 @@ function bind(){
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
-  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render()}));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();}));
   on('btn-sheet','click',()=>{const m=selM();ST.su=m?m.sheetUrl:'';ST.modal='sheet';render()});
   document.querySelectorAll('[data-imgslot]').forEach(el=>el.addEventListener('click',()=>{
     const sn=parseInt(el.dataset.imgslot);
@@ -975,6 +1067,10 @@ function bind(){
     printRefillList();
   });
 
+  // ── โกดัง: รีเฟรช / โหลดครั้งแรก ──
+  on('btn-wh-refresh','click',loadWarehouse);
+  on('btn-wh-load','click',loadWarehouse);
+
   // ── Reset ALL button ──
   on('reset-all','click',()=>{
     const m=selM(); if(!m)return;
@@ -1003,6 +1099,13 @@ function printRefillList(){
   const dateStr=now.toLocaleDateString('th-TH',{year:'2-digit',month:'2-digit',day:'2-digit'})+' '+
                 now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
 
+  // ── QR ยืนยันการเติม: สแกนแล้วยิง GET ไป Apps Script (action=refill_confirm) → ตัดสต็อกโกดัง ──
+  const refillId='RF-'+m.id+'-'+now.getTime();
+  const base=(m.sheetUrl||'').trim();
+  const itemStr=items.map(s=>s.n+'~'+(s.mx-s.c)).join('|');
+  const confirmUrl=base?base+(base.includes('?')?'&':'?')+'action=refill_confirm&m='+encodeURIComponent(m.id)+'&rf='+encodeURIComponent(refillId)+'&items='+encodeURIComponent(itemStr):'';
+  const qrImg=confirmUrl?'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data='+encodeURIComponent(confirmUrl):'';
+
   // ── ถ้ารันในแอป Android (Sunmi V2 Pro) → ส่งให้ native printer แทน window.print() ──
   if(window.AndroidPrinter&&typeof window.AndroidPrinter.printReceipt==='function'){
     const payload={
@@ -1011,6 +1114,9 @@ function printRefillList(){
       datetime:dateStr,
       totalItems:items.length,
       totalBottles:totalBottles,
+      refillId:refillId,
+      confirmUrl:confirmUrl,  // แอป Android เอาไปทำ QR เองได้ (ถ้ารองรับ)
+      qrUrl:qrImg,
       items:items.map(s=>({
         slot:String(s.s).padStart(2,'0'),
         name:s.n,
@@ -1057,6 +1163,12 @@ function printRefillList(){
     <div class="pr-divider"></div>
     <div class="pr-total">รวม ${items.length} รายการ</div>
     <div class="pr-total">${totalBottles} ขวด</div>
+    ${qrImg?`<div class="pr-divider"></div>
+    <div style="text-align:center;margin-top:6px">
+      <img id="pr-qr-img" src="${qrImg}" width="150" height="150" alt="QR" style="image-rendering:pixelated">
+      <div style="font-size:11px;font-weight:700;margin-top:4px">สแกนเพื่อยืนยันการเติม</div>
+      <div style="font-size:9px;color:#555">${refillId}</div>
+    </div>`:''}
     <div class="pr-foot">--- จบรายการ ---</div>
   `;
   document.body.appendChild(div);
@@ -1071,7 +1183,14 @@ function printRefillList(){
   // fallback (บางมือถือไม่ fire afterprint)
   setTimeout(cleanup,3000);
 
-  window.print();
+  // รอ QR โหลดก่อนพิมพ์ (กันพิมพ์ออกมาแล้วไม่มี QR)
+  const qrEl=document.getElementById('pr-qr-img');
+  if(qrEl&&!qrEl.complete){
+    qrEl.onload=()=>window.print();
+    qrEl.onerror=()=>window.print();
+  }else{
+    window.print();
+  }
 }
 
 function doLogin(){

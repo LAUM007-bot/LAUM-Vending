@@ -1102,7 +1102,7 @@ function printRefillList(){
   // ── QR ยืนยันการเติม: สแกนแล้วยิง GET ไป Apps Script (action=refill_confirm) → ตัดสต็อกโกดัง ──
   const refillId='RF-'+m.id+'-'+now.getTime();
   const base=(m.sheetUrl||'').trim();
-  const itemStr=items.map(s=>s.n+'~'+(s.mx-s.c)).join('|');
+  const itemStr=items.map(s=>s.s+'~'+(s.mx-s.c)).join('|');  // เลขช่อง~จำนวน (สั้น → QR โปร่ง) Apps Script map เป็นชื่อเอง
   const confirmUrl=base?base+(base.includes('?')?'&':'?')+'action=refill_confirm&m='+encodeURIComponent(m.id)+'&rf='+encodeURIComponent(refillId)+'&items='+encodeURIComponent(itemStr):'';
   const qrImg=confirmUrl?'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data='+encodeURIComponent(confirmUrl):'';
 

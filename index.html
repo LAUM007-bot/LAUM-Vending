@@ -293,6 +293,8 @@ ST.warehouse=null;       // สต็อกโกดัง (จาก action=war
 ST.warehouseLoading=false;
 ST.electricity=null;     // ค่าไฟ (จาก action=electricity)
 ST.electricityLoading=false;
+ST.analytics=null;       // รายงาน/พยากรณ์ (จาก action=analytics)
+ST.analyticsLoading=false;
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -449,6 +451,27 @@ async function loadElectricity(){
   ST.electricityLoading=true;render();
   ST.electricity=await fetchElectricity(url);
   ST.electricityLoading=false;render();
+}
+
+// ── ดึงรายงาน/พยากรณ์ (action=analytics) ────────────────────────────────
+async function fetchAnalytics(gasUrl){
+  if(!gasUrl||!gasUrl.trim())return null;
+  let url=gasUrl.trim()+(gasUrl.includes('?')?'&':'?')+'action=analytics';
+  try{
+    const res=await fetch(url,{method:"GET",redirect:"follow",cache:"no-store"});
+    if(!res.ok)return null;
+    const json=await res.json();
+    return json.ok?json:null;
+  }catch(e){return null;}
+}
+async function loadAnalytics(){
+  const m=selM();
+  const url=(m&&m.sheetUrl&&m.sheetUrl.trim())||((ST.machines.find(x=>x.sheetUrl&&x.sheetUrl.trim())||{}).sheetUrl||'');
+  if(!url)return;
+  ST.analyticsLoading=true;render();
+  ST.analytics=await fetchAnalytics(url);
+  if(!ST.warehouse) ST.warehouse=await fetchWarehouse(url);  // เผื่อ forecast โกดัง
+  ST.analyticsLoading=false;render();
 }
 
 // ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
@@ -641,7 +664,7 @@ function detailHTML(m){
       </div>
     </div>
     <div class="tabs">
-      ${['dash','stock','refill','wh','elec'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse,ICON.bolt][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง','ค่าไฟ'][i]}</button>`).join('')}
+      ${['dash','stock','refill','wh','elec','stats'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse,ICON.bolt,ICON.chart][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง','ค่าไฟ','รายงาน'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
     // สต็อก KPI (จาก Sheet ปัจจุบัน)
@@ -948,6 +971,79 @@ function detailHTML(m){
     }
     h+=`</div>`;
   }
+  if(ST.tab==="stats"){
+    const a=ST.analytics, m4=selM();
+    h+=`<div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:12px 16px;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:700">📈 รายงาน 30 วัน</div>
+          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">ยอดขาย · อันดับ · พยากรณ์เติม</div>
+        </div>
+        <button class="btn" id="btn-stats-refresh" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(59,130,246,0.4);color:var(--primary);background:rgba(59,130,246,0.08)">${ICON.cycle}<span>รีเฟรช</span></button>
+      </div>`;
+    if(ST.analyticsLoading){
+      h+=`<div style="text-align:center;padding:24px;color:var(--text-mute);font-size:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;margin:0 auto 6px;display:block"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>กำลังวิเคราะห์ยอดขาย...</div>`;
+    } else if(!m4||!m4.sheetUrl){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">⚠️ เชื่อม Apps Script ก่อนเพื่อดูรายงาน</div>`;
+    } else if(!a){
+      h+=`<div style="text-align:center;padding:16px"><button class="btn pri" id="btn-stats-load" style="font-size:12px;padding:9px 18px">ดึงรายงาน</button></div>`;
+    } else if(!a.byProduct||!a.byProduct.length){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">📭 ยังไม่มียอดขายใน 30 วัน</div>`;
+    } else {
+      const win=a.windowDays||30;
+      const perDay={}; a.byProduct.forEach(p=>perDay[p.name]=p.perDay);
+      // KPI
+      h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:13px;text-align:center"><div style="font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">ขาย 30 วัน</div><div style="font-size:19px;font-weight:800;color:var(--primary);font-family:'Space Grotesk',monospace">${a.total.units.toLocaleString()}</div></div>
+        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:12px;padding:13px;text-align:center"><div style="font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">รายรับ</div><div style="font-size:19px;font-weight:800;color:var(--success);font-family:'Space Grotesk',monospace">฿${a.total.revenue.toLocaleString()}</div></div>
+        <div style="background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);border-radius:12px;padding:13px;text-align:center"><div style="font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">เฉลี่ย/วัน</div><div style="font-size:19px;font-weight:800;color:#a78bfa;font-family:'Space Grotesk',monospace">${Math.round(a.total.units/win)}</div></div>
+      </div>`;
+      // กราฟยอดขายรายวัน
+      const maxU=Math.max(1,...a.daily.map(d=>d.units));
+      const bars=a.daily.map(d=>`<div title="${d.date}: ${d.units} ขวด" style="flex:1;display:flex;align-items:flex-end;height:60px"><div style="width:68%;margin:0 auto;height:${Math.round(d.units/maxU*100)}%;min-height:2px;background:${d.units?'var(--primary)':'#1e293b'};border-radius:2px 2px 0 0"></div></div>`).join('');
+      h+=`<div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">ยอดขายรายวัน (${win} วัน)</div>
+        <div style="display:flex;gap:1px;align-items:flex-end">${bars}</div>
+      </div>`;
+      // อันดับขายดี
+      const top=a.byProduct.slice(0,8), maxUnits=Math.max(1,...top.map(p=>p.units));
+      h+=`<div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">🔥 ขายดี (30 วัน)</div>`;
+      top.forEach((p,i)=>{
+        h+=`<div style="margin:7px 0">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+            <span style="color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%">${i+1}. ${p.name}</span>
+            <span style="color:var(--text-mute)">${p.units} ขวด · ฿${p.revenue.toLocaleString()}</span>
+          </div>
+          <div style="background:rgba(0,0,0,0.3);border-radius:4px;height:6px;overflow:hidden"><div style="height:100%;width:${Math.round(p.units/maxUnits*100)}%;background:linear-gradient(90deg,var(--primary),#4ade80);border-radius:4px"></div></div>
+        </div>`;
+      });
+      h+=`</div>`;
+      // ขายช้า
+      const slow=a.byProduct.slice().reverse().slice(0,5);
+      h+=`<div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">🐌 ขายช้า (อาจต้องเปลี่ยนสินค้า)</div>`;
+      slow.forEach(p=>{ h+=`<div style="display:flex;justify-content:space-between;font-size:12px;margin:5px 0"><span style="color:var(--text-dim)">${p.name}</span><span style="color:var(--text-mute)">${p.units} ขวด · ${p.perDay}/วัน</span></div>`; });
+      h+=`</div>`;
+      // พยากรณ์เติมตู้
+      const slotF=(m4?m4.slots:[]).map(s=>({s:s.s,n:s.n,c:s.c,pd:perDay[s.n]||0})).filter(x=>x.pd>0).map(x=>({s:x.s,n:x.n,c:x.c,days:Math.floor(x.c/x.pd)})).filter(x=>x.days<=7).sort((a,b)=>a.days-b.days);
+      h+=`<div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⏳ ใกล้หมดในตู้ (พยากรณ์)</div>`;
+      if(slotF.length){ slotF.forEach(x=>{ const c=x.days<=2?'var(--danger)':'var(--warning)'; h+=`<div class="alert" style="background:rgba(250,204,21,0.06);border:1px solid rgba(250,204,21,0.2);color:${c};margin:5px 0;font-size:12px">${ICON.alert}<span>ช่อง ${x.s} · ${x.n} — เหลือ ${x.c} · หมดใน ~${x.days} วัน</span></div>`; }); }
+      else h+=`<div style="font-size:12px;color:var(--text-mute)">ยังไม่มีช่องใกล้หมดใน 7 วัน ✓</div>`;
+      h+=`</div>`;
+      // โกดังต้องสั่ง
+      const whP=(ST.warehouse&&ST.warehouse.products)||[];
+      const whF=whP.map(p=>({n:p.name,b:p.bottles,pd:perDay[p.name]||0})).filter(x=>x.pd>0).map(x=>({n:x.n,b:x.b,days:Math.floor(x.b/x.pd)})).filter(x=>x.days<=14).sort((a,b)=>a.days-b.days);
+      h+=`<div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">📦 โกดังต้องสั่ง (พยากรณ์)</div>`;
+      if(!whP.length) h+=`<div style="font-size:12px;color:var(--text-mute)">เปิดแท็บโกดังเพื่อโหลดข้อมูลก่อน</div>`;
+      else if(whF.length){ whF.forEach(x=>{ const c=x.days<=5?'var(--danger)':'var(--warning)'; h+=`<div class="alert" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);color:${c};margin:5px 0;font-size:12px">${ICON.alert}<span>${x.n} — เหลือ ${x.b} ขวด · สั่งภายใน ~${x.days} วัน</span></div>`; }); }
+      else h+=`<div style="font-size:12px;color:var(--text-mute)">โกดังยังพอขายเกิน 14 วัน ✓</div>`;
+      h+=`</div>`;
+    }
+    h+=`</div>`;
+  }
   h+=`</div>`;
   return h;
 }
@@ -1080,7 +1176,7 @@ function bind(){
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
-  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricity&&!ST.electricityLoading)loadElectricity();}));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricity&&!ST.electricityLoading)loadElectricity();if(ST.tab==='stats'&&!ST.analytics&&!ST.analyticsLoading)loadAnalytics();}));
   on('btn-sheet','click',()=>{const m=selM();ST.su=m?m.sheetUrl:'';ST.modal='sheet';render()});
   document.querySelectorAll('[data-imgslot]').forEach(el=>el.addEventListener('click',()=>{
     const sn=parseInt(el.dataset.imgslot);
@@ -1164,6 +1260,10 @@ function bind(){
   // ── ค่าไฟ: รีเฟรช / โหลดครั้งแรก ──
   on('btn-elec-refresh','click',loadElectricity);
   on('btn-elec-load','click',loadElectricity);
+
+  // ── รายงาน: รีเฟรช / โหลดครั้งแรก ──
+  on('btn-stats-refresh','click',loadAnalytics);
+  on('btn-stats-load','click',loadAnalytics);
 
   // ── Reset ALL button ──
   on('reset-all','click',()=>{

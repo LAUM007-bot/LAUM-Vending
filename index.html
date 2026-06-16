@@ -217,6 +217,7 @@ textarea{resize:none;font-family:monospace;font-size:11px}
   .rfrow div:nth-child(5){display:none}
 }
 </style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
 <div id="R"></div>
@@ -750,7 +751,10 @@ function detailHTML(m){
           <div style="font-size:14px;font-weight:700">สรุปการเติมรอบนี้</div>
           <div style="font-size:11px;color:var(--text-mute);margin-top:2px">${needCount} รายการ · ต้องเติม ${total} ขวด</div>
         </div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btn-scan" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(168,139,250,0.4);color:#a78bfa;background:rgba(168,139,250,0.08)">
+            📷<span>สแกนยืนยันเติม</span>
+          </button>
           <button class="btn" id="btn-print" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(34,197,94,0.4);color:#22c55e;background:rgba(34,197,94,0.08)">
             🖨️<span>ปริ้นต์รายการ</span>
           </button>
@@ -1067,6 +1071,9 @@ function bind(){
     printRefillList();
   });
 
+  // ── สแกน QR ยืนยันเติม (ในแอป) ──
+  on('btn-scan','click',startScanner);
+
   // ── โกดัง: รีเฟรช / โหลดครั้งแรก ──
   on('btn-wh-refresh','click',loadWarehouse);
   on('btn-wh-load','click',loadWarehouse);
@@ -1191,6 +1198,110 @@ function printRefillList(){
   }else{
     window.print();
   }
+}
+
+// ════════════════════════════════════════════════════
+// 📷 สแกน QR ยืนยันเติม (ในแอป) + เสียงตี๊ด
+// ════════════════════════════════════════════════════
+let _scanner=null, _scanBusy=false;
+
+function beep(ok){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx)return;
+    const ctx=new Ctx();
+    const tone=(freq,start,dur)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001,ctx.currentTime+start);
+      g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+start+dur);
+      o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.02);
+    };
+    if(ok){tone(880,0,0.12);tone(1320,0.13,0.15);} else {tone(300,0,0.35);}
+  }catch(e){}
+}
+
+function closeScanner(){
+  const ov=document.getElementById('scan-ov');
+  const done=()=>{if(ov)ov.remove();_scanner=null;_scanBusy=false;};
+  if(_scanner){
+    try{
+      const p=_scanner.stop();
+      if(p&&p.then){p.then(()=>{try{_scanner&&_scanner.clear();}catch(e){}done();}).catch(done);}
+      else done();
+    }catch(e){done();}
+  } else done();
+}
+
+function startScanner(){
+  if(typeof Html5Qrcode==='undefined'){showToast('ตัวสแกนยังโหลดไม่เสร็จ ลองใหม่','error');return;}
+  _scanBusy=false;
+  const ov=document.createElement('div');
+  ov.id='scan-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,6,23,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px';
+  ov.innerHTML=`
+    <div style="color:#f1f5f9;font-size:15px;font-weight:700">📷 สแกน QR ใบเติม</div>
+    <div style="color:#94a3b8;font-size:12px">เล็งกล้องไปที่ QR บนใบเติม</div>
+    <div id="qr-reader" style="width:min(92vw,360px);border-radius:16px;overflow:hidden;background:#000"></div>
+    <div id="scan-msg" style="color:#94a3b8;font-size:12px;min-height:18px"></div>
+    <button id="scan-close" style="padding:10px 24px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:14px;font-family:'Sarabun',sans-serif">ปิด</button>`;
+  document.body.appendChild(ov);
+  document.getElementById('scan-close').onclick=closeScanner;
+
+  _scanner=new Html5Qrcode('qr-reader');
+  _scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:240}},
+    txt=>handleScanResult(txt), ()=>{}
+  ).catch(err=>{
+    const m=document.getElementById('scan-msg');
+    if(m)m.innerHTML='<span style="color:#fca5a5">เปิดกล้องไม่ได้ — กดอนุญาตกล้อง แล้วลองใหม่</span>';
+  });
+}
+
+async function handleScanResult(text){
+  if(_scanBusy)return;
+  if(!/action=refill_confirm/.test(text)){
+    const m=document.getElementById('scan-msg');
+    if(m)m.innerHTML='<span style="color:#facc15">ไม่ใช่ QR ใบเติม ลองใหม่</span>';
+    return;
+  }
+  _scanBusy=true;
+  if(_scanner){try{await _scanner.stop();_scanner.clear();}catch(e){}_scanner=null;}
+  const m=document.getElementById('scan-msg');if(m)m.innerHTML='<span style="color:#38bdf8">กำลังตัดสต็อก...</span>';
+  const url=text+(text.includes('?')?'&':'?')+'json=1';
+  try{
+    const res=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store'});
+    const j=await res.json();
+    beep(!!j.ok);
+    showScanResult(j);
+  }catch(e){
+    beep(false);
+    showScanResult({ok:false,error:'network'});
+  }
+}
+
+function showScanResult(j){
+  const ov=document.getElementById('scan-ov');if(!ov)return;
+  const ok=!!j.ok, already=j.status==='already';
+  const color=ok?'#22c55e':'#ef4444';
+  const title=already?'✅ ยืนยันไปแล้ว':ok?'✅ ตัดสต็อกแล้ว':'❌ ไม่สำเร็จ';
+  const errMap={no_rf:'QR ไม่มีรหัส (ปริ้นใบใหม่)',no_items:'QR ไม่มีรายการ',no_sheet:'ไม่พบชีต Warehouse',busy:'ระบบไม่ว่าง ลองใหม่',network:'เชื่อมต่อไม่ได้'};
+  const rows=(j.done||[]).map(d=>`<div style="font-size:13px;color:#e2e8f0;margin:3px 0">• ${d}</div>`).join('');
+  const warns=(j.warnings||[]).map(w=>`<div style="font-size:12px;color:#fca5a5;margin:3px 0">${w}</div>`).join('');
+  const errLine=ok?'':`<div style="font-size:13px;color:#fca5a5;margin-top:6px">${errMap[j.error]||j.error||''}</div>`;
+  ov.innerHTML=`
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;width:min(92vw,360px);text-align:center">
+      <div style="font-size:42px;margin-bottom:4px">${ok?'✅':'❌'}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};margin-bottom:4px">${title}</div>
+      ${j.rfId?`<div style="font-size:11px;color:#64748b;margin-bottom:10px">${j.machine||''} · ${j.rfId}</div>`:''}
+      <div style="text-align:left;margin:8px 0">${rows}${warns}</div>
+      ${errLine}
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button id="scan-again" style="flex:1;padding:11px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#a78bfa;font-size:14px;font-family:'Sarabun',sans-serif">สแกนต่อ</button>
+        <button id="scan-done" style="flex:1;padding:11px;border-radius:10px;border:none;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;font-weight:600;font-size:14px;font-family:'Sarabun',sans-serif">เสร็จ</button>
+      </div>
+    </div>`;
+  document.getElementById('scan-done').onclick=()=>{closeScanner();if(ST.tab==='wh')loadWarehouse();};
+  document.getElementById('scan-again').onclick=()=>{ov.remove();startScanner();};
 }
 
 function doLogin(){

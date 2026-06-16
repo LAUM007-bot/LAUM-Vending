@@ -234,7 +234,8 @@ const ICON={
   alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
   chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
-  warehouse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/></svg>'
+  warehouse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/></svg>',
+  bolt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
 };
 
 const PASS="laum320758";
@@ -290,6 +291,8 @@ ST.summaryLoading=false;
 ST.fleetSummary=null; // สรุปรวมทุกตู้ (จาก log) — รายสัปดาห์
 ST.warehouse=null;       // สต็อกโกดัง (จาก action=warehouse)
 ST.warehouseLoading=false;
+ST.electricity=null;     // ค่าไฟ (จาก action=electricity)
+ST.electricityLoading=false;
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -426,6 +429,26 @@ async function loadWarehouse(){
   ST.warehouseLoading=true;render();
   ST.warehouse=await fetchWarehouse(url);
   ST.warehouseLoading=false;render();
+}
+
+// ── ดึงค่าไฟ (action=electricity) ───────────────────────────────────────
+async function fetchElectricity(gasUrl){
+  if(!gasUrl||!gasUrl.trim())return null;
+  let url=gasUrl.trim()+(gasUrl.includes('?')?'&':'?')+'action=electricity';
+  try{
+    const res=await fetch(url,{method:"GET",redirect:"follow",cache:"no-store"});
+    if(!res.ok)return null;
+    const json=await res.json();
+    return json.ok?json:null;
+  }catch(e){return null;}
+}
+async function loadElectricity(){
+  const m=selM();
+  const url=(m&&m.sheetUrl&&m.sheetUrl.trim())||((ST.machines.find(x=>x.sheetUrl&&x.sheetUrl.trim())||{}).sheetUrl||'');
+  if(!url)return;
+  ST.electricityLoading=true;render();
+  ST.electricity=await fetchElectricity(url);
+  ST.electricityLoading=false;render();
 }
 
 // ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
@@ -618,7 +641,7 @@ function detailHTML(m){
       </div>
     </div>
     <div class="tabs">
-      ${['dash','stock','refill','wh'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง'][i]}</button>`).join('')}
+      ${['dash','stock','refill','wh','elec'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse,ICON.bolt][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง','ค่าไฟ'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
     // สต็อก KPI (จาก Sheet ปัจจุบัน)
@@ -865,6 +888,66 @@ function detailHTML(m){
     }
     h+=`</div>`;
   }
+  if(ST.tab==="elec"){
+    const el=ST.electricity, m3=selM();
+    h+=`<div style="display:flex;flex-direction:column;gap:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(250,204,21,0.06);border:1px solid rgba(250,204,21,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:700">⚡ ค่าไฟตู้</div>
+          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">เทียบปีนี้ − ปีก่อน = ค่าไฟที่ตู้กินจริง</div>
+        </div>
+        <button class="btn" id="btn-elec-refresh" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(250,204,21,0.4);color:#facc15;background:rgba(250,204,21,0.08)">${ICON.cycle}<span>รีเฟรช</span></button>
+      </div>`;
+    if(ST.electricityLoading){
+      h+=`<div style="text-align:center;padding:24px;color:var(--text-mute);font-size:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;margin:0 auto 6px;display:block"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>กำลังดึงข้อมูลค่าไฟ...</div>`;
+    } else if(!m3||!m3.sheetUrl){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">⚠️ เชื่อม Apps Script ก่อนเพื่อดูค่าไฟ</div>`;
+    } else if(!el){
+      h+=`<div style="text-align:center;padding:16px"><button class="btn pri" id="btn-elec-load" style="font-size:12px;padding:9px 18px">ดึงข้อมูลค่าไฟ</button></div>`;
+    } else if(!el.rows||!el.rows.length){
+      h+=`<div style="text-align:center;padding:20px;color:var(--text-mute);font-size:12px">📭 ยังไม่มีข้อมูลค่าไฟ<br><span style="font-size:10px">เพิ่มหน้า "Electricity" ใน Sheet (คอลัมน์: เดือน · ค่าไฟปีก่อน · ค่าไฟปีนี้)</span></div>`;
+    } else {
+      const profit = ST.summary ? ST.summary.profit : null;
+      h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:4px">
+        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">ค่าไฟเฉลี่ย/เดือน</div>
+          <div style="font-size:19px;font-weight:800;color:#facc15;font-family:'Space Grotesk',monospace">฿${el.avgNet.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">รวมทั้งปี</div>
+          <div style="font-size:19px;font-weight:800;color:var(--danger);font-family:'Space Grotesk',monospace">฿${el.totalNet.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);border-radius:12px;padding:13px;text-align:center">
+          <div style="font-size:9px;color:var(--text-mute);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">มีข้อมูล</div>
+          <div style="font-size:19px;font-weight:800;color:#a78bfa;font-family:'Space Grotesk',monospace">${el.months} ด.</div>
+        </div>
+      </div>`;
+      if(profit!=null){
+        const netAfter=Math.round(profit-el.avgNet);
+        h+=`<div style="background:rgba(15,23,42,0.7);border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;flex-wrap:wrap">
+          <div style="font-size:12px;color:var(--text-dim)">กำไรสุทธิหลังหักค่าไฟ<br><span style="font-size:10px;color:var(--text-mute)">กำไร ฿${Math.round(profit).toLocaleString()} − ค่าไฟ ฿${el.avgNet.toLocaleString()}/เดือน</span></div>
+          <div style="font-size:18px;font-weight:800;color:${netAfter>=0?'var(--success)':'var(--danger)'};font-family:'Space Grotesk',monospace">฿${netAfter.toLocaleString()}</div>
+        </div>`;
+      }
+      h+=`<div class="rfrow hdr" style="grid-template-columns:1.2fr 1fr 1fr 1fr">
+        <span>เดือน</span>
+        <span style="text-align:center">ปีก่อน</span>
+        <span style="text-align:center">ปีนี้</span>
+        <span style="text-align:right">ตู้กินไฟ</span>
+      </div>`;
+      el.rows.forEach(r=>{
+        const net=r.net;
+        h+=`<div class="rfrow" style="grid-template-columns:1.2fr 1fr 1fr 1fr">
+          <div style="font-size:12px;font-weight:600">${r.month}</div>
+          <div style="text-align:center;font-size:12px;color:var(--text-mute)">${r.last?'฿'+r.last.toLocaleString():'-'}</div>
+          <div style="text-align:center;font-size:12px;color:var(--text-dim)">${r.now?'฿'+r.now.toLocaleString():'-'}</div>
+          <div style="text-align:right;font-size:13px;font-weight:700;color:${net==null?'var(--text-mute)':'#facc15'}">${net==null?'-':'฿'+net.toLocaleString()}</div>
+        </div>`;
+      });
+      h+=`<div style="background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:11px;padding:11px 14px;margin-top:8px;font-size:11px;color:var(--text-mute);text-align:center">💡 กรอกบิลในหน้า "Electricity" ของ Sheet · "ตู้กินไฟ" = ปีนี้ − ปีก่อน</div>`;
+    }
+    h+=`</div>`;
+  }
   h+=`</div>`;
   return h;
 }
@@ -997,7 +1080,7 @@ function bind(){
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
-  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();}));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricity&&!ST.electricityLoading)loadElectricity();}));
   on('btn-sheet','click',()=>{const m=selM();ST.su=m?m.sheetUrl:'';ST.modal='sheet';render()});
   document.querySelectorAll('[data-imgslot]').forEach(el=>el.addEventListener('click',()=>{
     const sn=parseInt(el.dataset.imgslot);
@@ -1077,6 +1160,10 @@ function bind(){
   // ── โกดัง: รีเฟรช / โหลดครั้งแรก ──
   on('btn-wh-refresh','click',loadWarehouse);
   on('btn-wh-load','click',loadWarehouse);
+
+  // ── ค่าไฟ: รีเฟรช / โหลดครั้งแรก ──
+  on('btn-elec-refresh','click',loadElectricity);
+  on('btn-elec-load','click',loadElectricity);
 
   // ── Reset ALL button ──
   on('reset-all','click',()=>{
@@ -1203,21 +1290,32 @@ function printRefillList(){
 // ════════════════════════════════════════════════════
 // 📷 สแกน QR ยืนยันเติม (ในแอป) + เสียงตี๊ด
 // ════════════════════════════════════════════════════
-let _scanner=null, _scanBusy=false;
+let _scanner=null, _scanBusy=false, _audioCtx=null;
+
+// ปลุก AudioContext ตอนแตะปุ่ม (user gesture) — ไม่งั้นมือถือจะ mute
+function initAudio(){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx)return;
+    if(!_audioCtx)_audioCtx=new Ctx();
+    if(_audioCtx.state==='suspended')_audioCtx.resume();
+  }catch(e){}
+}
 
 function beep(ok){
   try{
     const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx)return;
-    const ctx=new Ctx();
+    if(!_audioCtx)_audioCtx=new Ctx();
+    if(_audioCtx.state==='suspended')_audioCtx.resume();
+    const ctx=_audioCtx;
     const tone=(freq,start,dur)=>{
       const o=ctx.createOscillator(),g=ctx.createGain();
       o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(ctx.destination);
       g.gain.setValueAtTime(0.0001,ctx.currentTime+start);
-      g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+start+0.01);
+      g.gain.exponentialRampToValueAtTime(0.3,ctx.currentTime+start+0.01);
       g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+start+dur);
       o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.02);
     };
-    if(ok){tone(880,0,0.12);tone(1320,0.13,0.15);} else {tone(300,0,0.35);}
+    if(ok){tone(880,0,0.12);tone(1320,0.13,0.16);} else {tone(300,0,0.4);}
   }catch(e){}
 }
 
@@ -1235,13 +1333,14 @@ function closeScanner(){
 
 function startScanner(){
   if(typeof Html5Qrcode==='undefined'){showToast('ตัวสแกนยังโหลดไม่เสร็จ ลองใหม่','error');return;}
+  initAudio();           // ปลุกเสียงตอนแตะปุ่ม (user gesture)
   _scanBusy=false;
   const ov=document.createElement('div');
   ov.id='scan-ov';
   ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,6,23,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px';
   ov.innerHTML=`
     <div style="color:#f1f5f9;font-size:15px;font-weight:700">📷 สแกน QR ใบเติม</div>
-    <div style="color:#94a3b8;font-size:12px">เล็งกล้องไปที่ QR บนใบเติม</div>
+    <div style="color:#94a3b8;font-size:12px">เล็งให้ QR เต็มกรอบ · ถือนิ่ง ~15-20 ซม.</div>
     <div id="qr-reader" style="width:min(92vw,360px);border-radius:16px;overflow:hidden;background:#000"></div>
     <div id="scan-msg" style="color:#94a3b8;font-size:12px;min-height:18px"></div>
     <button id="scan-close" style="padding:10px 24px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:14px;font-family:'Sarabun',sans-serif">ปิด</button>`;
@@ -1249,7 +1348,9 @@ function startScanner(){
   document.getElementById('scan-close').onclick=closeScanner;
 
   _scanner=new Html5Qrcode('qr-reader');
-  _scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:240}},
+  _scanner.start(
+    {facingMode:'environment'},
+    {fps:15,qrbox:{width:250,height:250},aspectRatio:1.0,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},
     txt=>handleScanResult(txt), ()=>{}
   ).catch(err=>{
     const m=document.getElementById('scan-msg');

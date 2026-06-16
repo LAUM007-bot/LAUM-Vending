@@ -66,6 +66,10 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 @keyframes spin1{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 @keyframes spin2{from{transform:rotate(360deg)}to{transform:rotate(0)}}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes ringDraw{from{stroke-dashoffset:213.6}}
+.health-ring{animation:ringDraw 1.2s cubic-bezier(.2,.8,.2,1)}
+@keyframes sparkDraw{from{stroke-dashoffset:120}}
+.spark{animation:sparkDraw 1.4s ease .2s both}
 
 .orbital-center{position:absolute;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.3) 0%,transparent 70%);display:flex;align-items:center;justify-content:center;z-index:5}
 .orbital-center::before{content:'';position:absolute;inset:-10px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.15) 0%,transparent 70%);animation:pulse 3s ease-in-out infinite}
@@ -295,6 +299,7 @@ ST.electricity=null;     // ค่าไฟ (จาก action=electricity)
 ST.electricityLoading=false;
 ST.analytics=null;       // รายงาน/พยากรณ์ (จาก action=analytics)
 ST.analyticsLoading=false;
+ST.machineCost=parseInt(localStorage.getItem('laum-machine-cost')||'0')||0; // ทุนตู้ (ไว้คิด ROI)
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -474,6 +479,74 @@ async function loadAnalytics(){
   ST.analyticsLoading=false;render();
 }
 
+// ════════════════════════════════════════════════════
+// 📋 รายงานเสนอสถานที่ + ROI (เฟส 4)
+// ════════════════════════════════════════════════════
+function closeReport(){const o=document.getElementById('report-ov');if(o)o.remove();}
+
+function reportCard(loading){
+  const a=ST.analytics, el=ST.electricity;
+  const rev=a?a.total.revenue:0, prof=a?a.total.profit:0;
+  const elec=el?el.avgNet:0, net=prof-elec, cost=ST.machineCost||0;
+  const payback=(net>0&&cost>0)?(Math.round(cost/net*10)/10):null;
+  const top=(a&&a.byProduct)?a.byProduct.slice(0,5):[];
+  const row=(label,val,c)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #1e293b"><span style="font-size:13px;color:#94a3b8">${label}</span><span style="font-size:15px;font-weight:700;color:${c||'#f1f5f9'};font-family:'Space Grotesk',monospace">${val}</span></div>`;
+  return `<div style="background:#0f172a;border:1px solid #334155;border-radius:18px;padding:22px;width:min(94vw,420px);max-height:90vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+      <div style="font-size:18px;font-weight:800;color:#f1f5f9">📋 รายงานผลตู้กด</div>
+      <button id="report-close" style="border:none;background:#1e293b;color:#94a3b8;width:30px;height:30px;border-radius:8px;font-size:15px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:14px">LAUM Vending · ภาพรวมต่อเดือน (30 วันล่าสุด)</div>
+    ${loading?`<div style="text-align:center;padding:34px;color:#64748b;font-size:13px">กำลังโหลดข้อมูล...</div>`:`
+    ${row('รายรับ/เดือน','฿'+rev.toLocaleString(),'#38bdf8')}
+    ${row('กำไรขาย/เดือน','฿'+prof.toLocaleString(),'#4ade80')}
+    ${row('ค่าไฟเฉลี่ย/เดือน','− ฿'+elec.toLocaleString(),'#facc15')}
+    ${row('กำไรสุทธิ/เดือน','฿'+net.toLocaleString(),net>=0?'#22c55e':'#ef4444')}
+    <div style="margin:16px 0 6px;padding:14px;background:#1e293b;border-radius:12px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">💰 คืนทุน (ROI)</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:13px;color:#94a3b8;white-space:nowrap">ทุนตู้ ฿</span>
+        <input id="report-cost" type="number" inputmode="numeric" value="${cost||''}" placeholder="เช่น 35000" style="flex:1;width:100%;padding:9px 11px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:14px;font-family:'Space Grotesk',monospace">
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:#94a3b8">คืนทุนใน</span>
+        <span id="report-payback" style="font-size:22px;font-weight:800;color:#a78bfa;font-family:'Space Grotesk',monospace">${payback!=null?payback+' เดือน':'—'}</span>
+      </div>
+    </div>
+    ${top.length?`<div style="margin-top:14px"><div style="font-size:12px;color:#94a3b8;margin-bottom:6px">🔥 สินค้าขายดี</div>${top.map((p,i)=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:#e2e8f0">${i+1}. ${p.name}</span><span style="color:#64748b">${p.units} ขวด</span></div>`).join('')}</div>`:''}
+    <div style="text-align:center;font-size:11px;color:#475569;margin-top:18px">📸 แคปหน้าจอนี้เพื่อส่งให้เจ้าของพื้นที่</div>`}
+  </div>`;
+}
+
+function bindReport(){
+  const c=document.getElementById('report-close'); if(c)c.onclick=closeReport;
+  const ci=document.getElementById('report-cost');
+  if(ci)ci.oninput=()=>{
+    ST.machineCost=parseInt(ci.value)||0;
+    try{localStorage.setItem('laum-machine-cost',ST.machineCost);}catch(e){}
+    const a=ST.analytics,el=ST.electricity;
+    const net=(a?a.total.profit:0)-(el?el.avgNet:0);
+    const pb=(net>0&&ST.machineCost>0)?(Math.round(ST.machineCost/net*10)/10):null;
+    const pe=document.getElementById('report-payback'); if(pe)pe.textContent=pb!=null?pb+' เดือน':'—';
+  };
+}
+
+async function openReport(){
+  let ov=document.getElementById('report-ov');
+  if(!ov){ov=document.createElement('div');ov.id='report-ov';ov.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(2,6,23,0.92);display:flex;align-items:center;justify-content:center;padding:16px';document.body.appendChild(ov);}
+  ov.onclick=(e)=>{if(e.target===ov)closeReport();};
+  ov.innerHTML=reportCard(true);
+  const c0=document.getElementById('report-close'); if(c0)c0.onclick=closeReport;
+  const url=(ST.machines.find(x=>x.sheetUrl&&x.sheetUrl.trim())||{}).sheetUrl||'';
+  if(url){
+    if(!ST.analytics) ST.analytics=await fetchAnalytics(url);
+    if(!ST.electricity) ST.electricity=await fetchElectricity(url);
+  }
+  ov=document.getElementById('report-ov'); if(!ov)return;
+  ov.innerHTML=reportCard(false);
+  bindReport();
+}
+
 // ── Toast / Confirm UI (แทน confirm() ที่ถูก block) ──────────────────────
 function showToast(msg, type='info', onConfirm=null){
   // ลบ toast เก่า
@@ -621,6 +694,7 @@ function fleetHTML(){
     </video>
     <div class="fleet-overlay"></div>
     <div class="fleet-bg"></div>
+    <button id="btn-report" style="position:absolute;top:14px;right:14px;z-index:20;padding:9px 14px;border-radius:10px;border:1px solid rgba(59,130,246,0.4);background:rgba(15,23,42,0.7);backdrop-filter:blur(8px);color:#38bdf8;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'Sarabun',sans-serif">📋 รายงาน</button>
     <div class="fleet-header">
       <div class="fleet-title">FLEET NETWORK</div>
       <div class="fleet-sub">${ST.machines.length} machine${ST.machines.length>1?'s':''} · click to inspect</div>
@@ -636,6 +710,56 @@ function fleetHTML(){
       <div class="fs-card" style="--c:#06b6d4"><div class="fs-ic-svg" style="color:#06b6d4">${ICON.revenue}</div><div class="fs-v" style="color:#06b6d4">฿${fleetProfit.toLocaleString()}</div><div class="fs-l">กำไรสัปดาห์</div></div>
       <div class="fs-card" style="--c:#a78bfa"><div class="fs-ic-svg" style="color:#a78bfa">${ICON.stock}</div><div class="fs-v" style="color:#a78bfa">${fleetStock}/${fleetMax}</div><div class="fs-l">สต็อกรวม</div></div>
       <div class="fs-card" style="--c:${fleetAlerts>0?'#ef4444':'#f97316'}"><div class="fs-ic-svg" style="color:${fleetAlerts>0?'#ef4444':'#f97316'}">${fleetAlerts>0?ICON.alert:ICON.check}</div><div class="fs-v" style="color:${fleetAlerts>0?'#ef4444':'#f97316'}">${fleetAlerts}</div><div class="fs-l">แจ้งเตือน</div></div>
+    </div>
+  </div>`;
+}
+
+// ── การ์ดสุขภาพตู้ (polish) — คะแนนจากสต็อก/ช่องหมด/ขาย ──
+function healthCard(m,ti,to,alerts,lows){
+  const totalSlots=m.slots.length||1;
+  const fullness=to>0?ti/to:0;
+  const emptyN=alerts.length, lowN=lows.length, nearN=emptyN+lowN;
+  let score=Math.round(fullness*55 + (1-emptyN/totalSlots)*30 + (1-lowN/totalSlots)*15);
+  if(ST.summary&&ST.summary.stuck>0)score-=8;
+  score=Math.max(0,Math.min(100,score));
+  const col=score>=80?'#22c55e':score>=55?'#facc15':'#ef4444';
+  const cRGB=score>=80?'34,197,94':score>=55?'250,204,21':'239,68,68';
+  const label=score>=80?'สุขภาพดี':score>=55?'พอใช้':'ต้องดูแล';
+  const C=213.6, off=Math.round(C*(1-score/100)*10)/10;
+  const a=ST.analytics;
+  const rev='฿'+(m.dailyRev||0).toLocaleString();
+  const sold=(m.dailySold||0).toLocaleString();
+  const topName=(a&&a.byProduct&&a.byProduct[0])?a.byProduct[0].name:'—';
+  const topUnits=(a&&a.byProduct&&a.byProduct[0])?a.byProduct[0].units:'';
+  let spark='';
+  if(a&&a.daily&&a.daily.length){
+    const last=a.daily.slice(-10).map(d=>d.units), mx=Math.max(1,...last);
+    const pts=last.map((v,i)=>`${Math.round(i/(Math.max(1,last.length-1))*52)},${Math.round(18-v/mx*16)}`).join(' ');
+    spark=`<svg width="54" height="20" viewBox="0 0 54 20"><polyline class="spark" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${pts}" stroke-dasharray="120" stroke-dashoffset="0"/></svg>`;
+  }
+  const tile=(inner)=>`<div style="background:rgba(15,23,42,0.7);border-radius:11px;padding:10px">${inner}</div>`;
+  return `<div style="background:rgba(30,41,59,0.65);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px;backdrop-filter:blur(10px)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:10px;color:var(--text-mute);letter-spacing:1.5px;text-transform:uppercase">สุขภาพตู้ · วันนี้</div>
+      <span style="font-size:11px;color:${col};background:rgba(${cRGB},0.12);padding:4px 12px;border-radius:20px;font-weight:600">● ${label}</span>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <div style="position:relative;width:100px;height:100px;flex-shrink:0">
+        <svg width="100" height="100" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="34" fill="none" stroke="#334155" stroke-width="8"/>
+          <circle class="health-ring" cx="40" cy="40" r="34" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}" transform="rotate(-90 40 40)"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <span style="font-size:26px;font-weight:700;color:#f1f5f9;font-family:'Space Grotesk',monospace">${score}</span>
+          <span style="font-size:9px;color:var(--text-mute)">คะแนน</span>
+        </div>
+      </div>
+      <div style="flex:1;min-width:220px;display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        ${tile(`<div style="font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.5px">ยอดวันนี้</div><div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:2px"><span style="font-size:16px;font-weight:700;color:#38bdf8;font-family:'Space Grotesk',monospace">${rev}</span>${spark}</div>`)}
+        ${tile(`<div style="font-size:9px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.5px">ขายวันนี้</div><div style="font-size:16px;font-weight:700;color:#a78bfa;font-family:'Space Grotesk',monospace;margin-top:2px">${sold} <span style="font-size:11px;color:var(--text-mute)">ขวด</span></div>`)}
+        <div style="background:rgba(15,23,42,0.7);border-radius:11px;padding:10px;display:flex;align-items:center;gap:8px"><span style="font-size:16px">🔥</span><div style="min-width:0"><div style="font-size:9px;color:var(--text-mute)">ขายดีสุด</div><div style="font-size:12px;color:#f1f5f9;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${topName}</div></div>${topUnits!==''?`<span style="margin-left:auto;font-size:12px;color:#f59e0b;font-family:'Space Grotesk',monospace">${topUnits}</span>`:''}</div>
+        <div style="background:rgba(15,23,42,0.7);border-radius:11px;padding:10px;display:flex;align-items:center;gap:8px"><span style="font-size:16px">⚠️</span><div><div style="font-size:9px;color:var(--text-mute)">ช่องใกล้หมด</div><div style="font-size:12px;color:#f1f5f9;font-weight:600">เหลือน้อย</div></div><span style="margin-left:auto;font-size:18px;font-weight:700;color:${nearN>0?'#facc15':'#22c55e'};font-family:'Space Grotesk',monospace">${nearN}</span></div>
+      </div>
     </div>
   </div>`;
 }
@@ -667,6 +791,7 @@ function detailHTML(m){
       ${['dash','stock','refill','wh','elec','stats'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse,ICON.bolt,ICON.chart][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง','ค่าไฟ','รายงาน'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
+    h+=healthCard(m,ti,to,alerts,lows);   // ⭐ การ์ดสุขภาพตู้ (polish)
     // สต็อก KPI (จาก Sheet ปัจจุบัน)
     h+=`<div class="kpis">
       <div class="kpi" style="--c:#a78bfa"><div class="kpi-ic" style="color:#a78bfa">${ICON.stock}</div><div class="kpi-v" style="color:#a78bfa">${ti}/${to}</div><div class="kpi-l">สต็อกคงเหลือ</div></div>
@@ -1264,6 +1389,9 @@ function bind(){
   // ── รายงาน: รีเฟรช / โหลดครั้งแรก ──
   on('btn-stats-refresh','click',loadAnalytics);
   on('btn-stats-load','click',loadAnalytics);
+
+  // ── รายงานเสนอสถานที่ (ปุ่มลอยหน้า Fleet) ──
+  on('btn-report','click',openReport);
 
   // ── Reset ALL button ──
   on('reset-all','click',()=>{

@@ -1646,6 +1646,31 @@ window.addEventListener('resize',()=>{
 });
 render();
 if(ST.in)setTimeout(loadFleetSummary,500); // auto-load fleet summary ถ้ายัง login อยู่
+
+// ── Auto-refresh: ดึงข้อมูลสดทุกครั้งที่กลับมาที่แอป (ประหยัด ไม่ poll ตลอด) ──
+let _refreshing=false, _lastRefresh=0;
+async function refreshCurrentView(){
+  if(!ST.in||_refreshing)return;
+  if(Date.now()-_lastRefresh<5000)return;                                   // กันยิงรัว
+  if(ST.modal||document.getElementById('scan-ov')||document.getElementById('report-ov'))return; // อย่ารบกวนตอนมีหน้าต่างเปิด
+  _refreshing=true; _lastRefresh=Date.now();
+  try{
+    if(ST.view==='fleet'){ await loadFleetSummary(); }
+    else if(ST.view==='detail'){
+      const m=selM();
+      if(m&&m.sheetUrl){
+        try{ await fetchSheetData(ST.sel,m.sheetUrl); }catch(e){}           // สต็อกล่าสุด
+        if(ST.summary)                     ST.summary=await fetchSummary(m.sheetUrl,ST.period);
+        if(ST.tab==='wh'&&ST.warehouse)    ST.warehouse=await fetchWarehouse(m.sheetUrl);
+        if(ST.tab==='elec'&&ST.electricity)ST.electricity=await fetchElectricity(m.sheetUrl);
+        if(ST.tab==='stats'&&ST.analytics) ST.analytics=await fetchAnalytics(m.sheetUrl);
+        render();
+      }
+    }
+  }finally{ _refreshing=false; }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')refreshCurrentView(); });
+window.addEventListener('focus',refreshCurrentView);
 </script>
 </body>
 </html>

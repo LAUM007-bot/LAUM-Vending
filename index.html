@@ -1422,8 +1422,14 @@ function bind(){
 }
 
 // ── ปริ้นต์รายการสินค้าที่ต้องเติม (Sunmi V2 Pro / thermal 58mm) ──
-function printRefillList(){
-  const m=selM(); if(!m){showToast('ไม่พบตู้','error');return;}
+async function printRefillList(){
+  let m=selM(); if(!m){showToast('ไม่พบตู้','error');return;}
+  // 🔄 ดึงสต็อกล่าสุดก่อนปริ้นเสมอ (กันปริ้นข้อมูลเก่า — ไม่ต้องจำกดอัปเดตเอง)
+  if(m.sheetUrl){
+    showToast('🔄 อัปเดตสต็อกล่าสุด...','info');
+    try{ await fetchSheetData(ST.sel,m.sheetUrl); }catch(e){}
+    render(); m=selM(); if(!m)return;
+  }
   const items=m.slots.filter(s=>s.mx-s.c>0).sort((a,b)=>(+a.s)-(+b.s));
   if(!items.length){showToast('ไม่มีรายการที่ต้องเติม','info');return;}
 
@@ -1447,6 +1453,7 @@ function printRefillList(){
       datetime:dateStr,
       totalItems:items.length,
       totalBottles:totalBottles,
+      fontScale:1,            // ปรับขนาดฟอนต์ใบปริ้น (เพิ่มเป็น 1.2/1.3 ถ้าอยากใหญ่ขึ้น — ไม่ต้องลงแอปใหม่)
       refillId:refillId,
       confirmUrl:confirmUrl,  // แอป Android เอาไปทำ QR เองได้ (ถ้ารองรับ)
       qrUrl:qrImg,

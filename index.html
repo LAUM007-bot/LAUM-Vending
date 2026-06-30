@@ -1303,7 +1303,7 @@ function bind(){
   on('back-fleet','click',()=>{ST.view='fleet';ST.sel=null;render();loadFleetSummary();});
   document.querySelectorAll('[data-mid]').forEach(el=>el.addEventListener('click',()=>{ST.sel=el.dataset.mid;ST.view='detail';ST.tab='dash';render()}));
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
-  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouse&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricity&&!ST.electricityLoading)loadElectricity();if(ST.tab==='stats'&&!ST.analytics&&!ST.analyticsLoading)loadAnalytics();}));
+  document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricityLoading)loadElectricity();if(ST.tab==='stats'&&!ST.analyticsLoading)loadAnalytics();}));
   on('btn-sheet','click',()=>{const m=selM();ST.su=m?m.sheetUrl:'';ST.modal='sheet';render()});
   document.querySelectorAll('[data-imgslot]').forEach(el=>el.addEventListener('click',()=>{
     const sn=parseInt(el.dataset.imgslot);

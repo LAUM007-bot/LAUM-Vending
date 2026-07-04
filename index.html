@@ -222,6 +222,15 @@ textarea{resize:none;font-family:monospace;font-size:11px}
 }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+// iPhone/iPad (WebKit) ไม่มี BarcodeDetector ในตัว → โหลดตัวถอดรหัส WASM (เร็วแบบ native) มาเสียบแทน
+// Android Chrome มีในตัวอยู่แล้ว → ข้ามอัตโนมัติ (ตัวไฟล์เสียบ window.BarcodeDetector ให้เองถ้ายังไม่มี)
+if(!('BarcodeDetector' in window)){
+  var _bd=document.createElement('script');
+  _bd.src='https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/iife/index.js';
+  document.head.appendChild(_bd);
+}
+</script>
 </head>
 <body>
 <div id="R"></div>
@@ -1586,7 +1595,8 @@ function startScanner(){
   ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,6,23,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px';
   ov.innerHTML=`
     <div style="color:#f1f5f9;font-size:15px;font-weight:700">📷 สแกน QR ใบเติม</div>
-    <div style="color:#94a3b8;font-size:12px">เล็งให้ QR เต็มกรอบ · ถือนิ่ง ~15-20 ซม.</div>
+    <div style="color:#94a3b8;font-size:12px">เล็งใกล้ ๆ ถือนิ่ง เดี๋ยวติดเอง</div>
+    <div style="color:#64748b;font-size:10px">ถ้าเบราว์เซอร์ถามสิทธิ์กล้อง กด "อนุญาต" (ไม่ใช่ "ครั้งนี้เท่านั้น") จะได้ไม่ถามซ้ำ</div>
     <div id="qr-reader" style="width:min(92vw,360px);border-radius:16px;overflow:hidden;background:#000"></div>
     <div id="scan-msg" style="color:#94a3b8;font-size:12px;min-height:18px"></div>
     <button id="scan-close" style="padding:10px 24px;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:14px;font-family:'Sarabun',sans-serif">ปิด</button>`;
@@ -1596,9 +1606,25 @@ function startScanner(){
   _scanner=new Html5Qrcode('qr-reader');
   _scanner.start(
     {facingMode:'environment'},
-    {fps:15,qrbox:{width:250,height:250},aspectRatio:1.0,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},
+    {
+      fps:20,
+      // กรอบสแกนใหญ่ 85% ของจอ — ไม่ต้องเล็งเป๊ะก็ติด
+      qrbox:(w,h)=>{const s=Math.floor(Math.min(w,h)*0.85);return{width:s,height:s};},
+      experimentalFeatures:{useBarCodeDetectorIfSupported:true},
+      // ขอภาพความละเอียดสูง → QR คมชัด ถอดรหัสง่ายขึ้นมาก
+      videoConstraints:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}
+    },
     txt=>handleScanResult(txt), ()=>{}
-  ).catch(err=>{
+  ).then(()=>{
+    // เปิดออโต้โฟกัสต่อเนื่อง + ซูมเบา ๆ ช่วยจับ QR เล็กบนใบปริ้น (ถ้ากล้องรองรับ)
+    setTimeout(()=>{try{
+      const caps=(_scanner&&_scanner.getRunningTrackCapabilities)?_scanner.getRunningTrackCapabilities():null;
+      const adv=[];
+      if(caps&&Array.isArray(caps.focusMode)&&caps.focusMode.indexOf('continuous')>=0)adv.push({focusMode:'continuous'});
+      if(caps&&caps.zoom&&caps.zoom.max>=1.5)adv.push({zoom:Math.min(2,caps.zoom.max)});
+      if(adv.length&&_scanner.applyVideoConstraints)_scanner.applyVideoConstraints({advanced:adv});
+    }catch(e){}},600);
+  }).catch(err=>{
     const m=document.getElementById('scan-msg');
     if(m)m.innerHTML='<span style="color:#fca5a5">เปิดกล้องไม่ได้ — กดอนุญาตกล้อง แล้วลองใหม่</span>';
   });

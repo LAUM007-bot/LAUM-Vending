@@ -297,7 +297,7 @@ function clearLoginPersist(){try{localStorage.removeItem("laum-login");}catch(e)
 
 let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:0,sold:0,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
 ST.in=isLoggedInPersist();ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
-ST.af={name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
+ST.af={id:"",name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
 ST.period="today";
 ST.summary=null;
 ST.summaryLoading=false;
@@ -374,7 +374,10 @@ async function fetchSheetData(machineId, gasUrl) {
   }
   const url = gasUrl.trim();
   // ต่อ ?action=products (รองรับ URL มี / ท้ายหรือไม่มีก็ได้)
-  const fetchUrl = url.includes("?") ? url + "&action=products" : url + "?action=products";
+  // ★ ส่ง machineId ไปด้วย → Apps Script เปิดแท็บของตู้นั้นให้เอง (จาก CONFIG.MACHINES)
+  //   ถ้าไม่ส่ง มันจะอ่าน ชีต1 ตลอด ทุกตู้เลยเห็นสินค้าชุดเดียวกันหมด
+  const fetchUrl = url + (url.includes("?") ? "&" : "?")
+                 + "action=products&machineId=" + encodeURIComponent(machineId || "");
   
   let res;
   try {
@@ -1189,6 +1192,7 @@ function modalHTML(){
         <button class="btn" id="mc" style="padding:6px 11px">✕</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:13px">
+        <div><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:1px;text-transform:uppercase">รหัสตู้</div><input id="aid" placeholder="เช่น KC1" value="${f.id||''}" style="text-transform:uppercase"><div style="font-size:10px;color:var(--text-dim);margin-top:5px">ต้องตรงกับ id ใน CONFIG.MACHINES และ MACHINE_ID ในโค้ด ESP32</div></div>
         <div><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:1px;text-transform:uppercase">ชื่อตู้</div><input id="an" placeholder="เช่น ตู้ฟูจิ สาขา 2" value="${f.name}"></div>
         <div><div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:1px;text-transform:uppercase">สถานที่ตั้ง</div><input id="al" placeholder="เช่น หน้าร้านสะดวกซื้อ" value="${f.loc}"></div>
         <div><div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:600;letter-spacing:1px;text-transform:uppercase">ประเภทตู้</div>
@@ -1320,16 +1324,21 @@ function bind(){
     ST.imgSlot=sn;ST.imgInput=s?.img||'';ST.modal='img';render();
   }));
   document.querySelectorAll('[data-n]').forEach(el=>el.addEventListener('click',()=>{ST.af.n=el.dataset.n;render()}));
+  on('aid','input',e=>{ST.af.id=e.target.value.toUpperCase().replace(/\s/g,'')});
   on('an','input',e=>{ST.af.name=e.target.value});
   on('al','input',e=>{ST.af.loc=e.target.value});
   on('ac','click',()=>{
     const f=ST.af;if(!f.name.trim()||!f.loc.trim())return;
+    // รหัสตู้ต้องกรอกเอง และห้ามซ้ำ — เพราะต้องตรงกับทะเบียนฝั่ง Apps Script
+    const mid=(f.id||'').trim().toUpperCase();
+    if(!mid){showToast('ใส่รหัสตู้ก่อน (เช่น KC1)','error');return;}
+    if(ST.machines.some(x=>x.id===mid)){showToast('รหัส '+mid+' ซ้ำกับตู้ที่มีอยู่','error');return;}
     const typeMap={'30':30,'36':36,'spiral':60};
     const n=typeMap[f.n]||30;
     const typeName={'30':'ตู้ 30 ช่อง','36':'ตู้ 36 ช่อง','spiral':'ตู้เกลียว'}[f.n]||'ตู้ 30 ช่อง';
-    const nm={id:'M'+Date.now().toString().slice(-4),name:f.name.trim(),loc:f.loc.trim(),type:typeName,on:false,rev:0,sold:0,sheetUrl:'',
+    const nm={id:mid,name:f.name.trim(),loc:f.loc.trim(),type:typeName,on:false,rev:0,sold:0,sheetUrl:'',
       slots:Array.from({length:n},(_,i)=>({s:i+1,n:'ช่องที่ '+(i+1),e:'🥤',img:'',p:15,mx:20,c:0}))};
-    ST.machines.push(nm);ST.af={name:'',loc:'',n:'30'};ST.modal='';saveState();render();
+    ST.machines.push(nm);ST.af={id:'',name:'',loc:'',n:'30'};ST.modal='';saveState();render();
   });
   on('del-machine','click',()=>{
     const m=selM(); if(!m)return;

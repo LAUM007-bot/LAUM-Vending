@@ -245,14 +245,29 @@ select{font-family:var(--body)}
     <select id="cfgVoice"></select>
     <div class="note" id="voiceWarn"></div>
 
-    <label>ElevenLabs API Key — ใส่แล้วจะใช้เสียงนี้แทน</label>
+    <label>Google TTS Key — เสียงไทยหญิง (แนะนำ · ฟรี 1M/เดือน)</label>
+    <input type="password" id="cfgGKey" placeholder="ว่างไว้ = ข้ามไปตัวถัดไป">
+
+    <label>Google Voice</label>
+    <input type="text" id="cfgGVoice" placeholder="th-TH-Neural2-C">
+
+    <label>Azure TTS Key — สำรอง</label>
+    <input type="password" id="cfgAzKey" placeholder="ว่างไว้ = ข้ามไปตัวถัดไป">
+
+    <label>Azure Region</label>
+    <input type="text" id="cfgAzRegion" placeholder="southeastasia">
+
+    <label>Azure Voice</label>
+    <input type="text" id="cfgAzVoice" placeholder="th-TH-PremwadeeNeural">
+
+    <label>ElevenLabs API Key — สำรอง (ถ้าไม่ใส่ Azure)</label>
     <input type="password" id="cfgElKey" placeholder="ว่างไว้ = ใช้เสียงของเครื่อง">
 
     <label>Voice ID</label>
     <input type="text" id="cfgElVoice" placeholder="EXAVITQu4vr4xnSDxMaL">
 
     <label>Model</label>
-    <input type="text" id="cfgElModel" placeholder="eleven_v3">
+    <input type="text" id="cfgElModel" placeholder="eleven_turbo_v2_5">
 
     <label>ความเร็ว <span id="rateVal">0.97</span> · ระดับเสียง <span id="pitchVal">1.08</span></label>
     <input type="range" id="cfgRate" min="0.7" max="1.3" step="0.01" value="0.97">
@@ -284,10 +299,14 @@ const store={
 };
 
 let CFG = { url:'', secret:'', name:'เจ้านาย', key:'', voice:'', rate:0.97, pitch:1.08,
-            elKey:'', elVoice:'', elModel:'' };
+            elKey:'', elVoice:'', elModel:'',
+            azKey:'', azRegion:'southeastasia', azVoice:'th-TH-PremwadeeNeural',
+            gKey:'', gVoice:'th-TH-Neural2-C' };
 async function loadCfg(){
   try{ const r = await store.get('mel:cfg'); if(r) CFG = {...CFG, ...JSON.parse(r.value)}; }catch(e){}
   $('#cfgElKey').value=CFG.elKey; $('#cfgElVoice').value=CFG.elVoice; $('#cfgElModel').value=CFG.elModel;
+  $('#cfgAzKey').value=CFG.azKey||''; $('#cfgAzRegion').value=CFG.azRegion||'southeastasia'; $('#cfgAzVoice').value=CFG.azVoice||'th-TH-PremwadeeNeural';
+  $('#cfgGKey').value=CFG.gKey||''; $('#cfgGVoice').value=CFG.gVoice||'th-TH-Neural2-C';
   $('#cfgUrl').value=CFG.url; $('#cfgSecret').value=CFG.secret;
   $('#cfgName').value=CFG.name; $('#cfgKey').value=CFG.key;
   $('#cfgRate').value=CFG.rate; $('#cfgPitch').value=CFG.pitch;
@@ -302,7 +321,9 @@ async function saveCfg(){
   CFG = { url:$('#cfgUrl').value.trim(), secret:$('#cfgSecret').value.trim(),
           name:$('#cfgName').value.trim()||'เจ้านาย', key:$('#cfgKey').value.trim(),
           voice:$('#cfgVoice').value, rate:$('#cfgRate').value, pitch:$('#cfgPitch').value,
-          elKey:$('#cfgElKey').value.trim(), elVoice:$('#cfgElVoice').value.trim(), elModel:$('#cfgElModel').value.trim() };
+          elKey:$('#cfgElKey').value.trim(), elVoice:$('#cfgElVoice').value.trim(), elModel:$('#cfgElModel').value.trim(),
+          azKey:$('#cfgAzKey').value.trim(), azRegion:$('#cfgAzRegion').value.trim()||'southeastasia', azVoice:$('#cfgAzVoice').value.trim()||'th-TH-PremwadeeNeural',
+          gKey:$('#cfgGKey').value.trim(), gVoice:$('#cfgGVoice').value.trim()||'th-TH-Neural2-C' };
   try{ await store.set('mel:cfg', JSON.stringify(CFG)); }catch(e){}
   $('#sheet').classList.remove('on');
   say('รับทราบค่ะ ' + CFG.name + ' ตั้งค่าเรียบร้อยแล้ว', true);
@@ -350,10 +371,10 @@ async function speakEleven(text){
   const r=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+(CFG.elVoice||'EXAVITQu4vr4xnSDxMaL')+'?output_format=mp3_44100_128',{
     method:'POST',
     headers:{'xi-api-key':CFG.elKey,'Content-Type':'application/json'},
-    body:JSON.stringify({text:text,model_id:CFG.elModel||'eleven_v3',
+    body:JSON.stringify({text:text,model_id:CFG.elModel||'eleven_turbo_v2_5',
       voice_settings:{stability:0.5,similarity_boost:0.75}})
   });
-  if(!r.ok) throw new Error('el-'+r.status);
+  if(!r.ok){ let m=''; try{ m=(await r.text()).slice(0,160); }catch(e){} throw new Error('el-'+r.status+(m?' '+m:'')); }
   const url=URL.createObjectURL(await r.blob());
   if(audioEl) audioEl.pause();
   audioEl=new Audio(url);
@@ -374,7 +395,58 @@ function speakBrowser(text){
   speechSynthesis.speak(u);
 }
 
+async function speakAzure(text){
+  const region=(CFG.azRegion||'southeastasia').trim();
+  const voice=(CFG.azVoice||'th-TH-PremwadeeNeural').trim();
+  const clean=text.replace(/[*_#`]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const rp=Math.round(((Number(CFG.rate)||0.97)-1)*100);
+  const rate=(rp>=0?'+':'')+rp+'%';
+  const ssml="<speak version='1.0' xml:lang='th-TH'><voice name='"+voice+"'><prosody rate='"+rate+"'>"+clean+"</prosody></voice></speak>";
+  const r=await fetch('https://'+region+'.tts.speech.microsoft.com/cognitiveservices/v1',{
+    method:'POST',
+    headers:{'Ocp-Apim-Subscription-Key':CFG.azKey,'Content-Type':'application/ssml+xml',
+             'X-Microsoft-OutputFormat':'audio-24khz-48kbitrate-mono-mp3'},
+    body:ssml
+  });
+  if(!r.ok){ let m=''; try{ m=(await r.text()).slice(0,160);}catch(e){} throw new Error('az-'+r.status+(m?' '+m:'')); }
+  const url=URL.createObjectURL(await r.blob());
+  if(audioEl) audioEl.pause();
+  audioEl=new Audio(url);
+  audioEl.onplay=()=>setState('speak','กำลังพูด');
+  audioEl.onended=()=>{ setState('idle','พร้อม'); URL.revokeObjectURL(url); };
+  await audioEl.play();
+}
+
+async function speakGoogle(text){
+  const voice=(CFG.gVoice||'th-TH-Neural2-C').trim();
+  const clean=text.replace(/[*_#`]/g,'');
+  const r=await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key='+encodeURIComponent(CFG.gKey),{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      input:{text:clean},
+      voice:{languageCode:'th-TH', name:voice},
+      audioConfig:{audioEncoding:'MP3', speakingRate:Number(CFG.rate)||0.97}
+    })
+  });
+  if(!r.ok){ let m=''; try{ m=(await r.text()).slice(0,180);}catch(e){} throw new Error('g-'+r.status+(m?' '+m:'')); }
+  const j=await r.json();
+  if(!j.audioContent) throw new Error('g-noaudio');
+  if(audioEl) audioEl.pause();
+  audioEl=new Audio('data:audio/mp3;base64,'+j.audioContent);
+  audioEl.onplay=()=>setState('speak','กำลังพูด');
+  audioEl.onended=()=>setState('idle','พร้อม');
+  await audioEl.play();
+}
+
 async function speak(text){
+  if(CFG.gKey){
+    try{ await speakGoogle(text); return; }
+    catch(e){ addTurn('jv','(เสียง Google ใช้ไม่ได้: '+e.message+' — ลองตัวถัดไป)'); }
+  }
+  if(CFG.azKey){
+    try{ await speakAzure(text); return; }
+    catch(e){ addTurn('jv','(เสียง Azure ใช้ไม่ได้: '+e.message+' — ลองตัวถัดไป)'); }
+  }
   if(CFG.elKey){
     try{ await speakEleven(text); return; }
     catch(e){ addTurn('jv','(เสียง ElevenLabs ใช้ไม่ได้: '+e.message+' — สลับไปเสียงเครื่องแทน)'); }

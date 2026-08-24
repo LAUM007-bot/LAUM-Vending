@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>เมล — ศูนย์สั่งงานด้วยเสียง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Anuphan:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0C1719;
+  --slate:#15272A;
+  --line:#223B3F;
+  --brass:#C9922E;
+  --brass-dim:#8A6620;
+  --signal:#54B8A4;
+  --paper:#EEE7D6;
+  --paper-dim:#BDB49E;
+  --alert:#C4573F;
+  --display:'Chakra Petch',system-ui,sans-serif;
+  --body:'Anuphan',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--ink);
+  color:var(--paper);
+  font-family:var(--body);
+  font-weight:300;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(120% 80% at 50% -10%,rgba(84,184,164,.10),transparent 60%);
+}
+
+/* ---------- shell ---------- */
+.shell{position:relative;z-index:1;height:100dvh;display:grid;grid-template-columns:1fr 380px}
+@media(max-width:900px){.shell{grid-template-columns:1fr;grid-template-rows:1fr auto}}
+
+/* ---------- console ---------- */
+.console{display:flex;flex-direction:column;min-height:0;padding:env(safe-area-inset-top) 0 0}
+.bar{
+  display:flex;align-items:center;gap:14px;
+  padding:16px 22px;border-bottom:1px solid var(--line);
+}
+.mark{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.34em;color:var(--brass)}
+.state{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  font-family:var(--display);font-size:11px;letter-spacing:.14em;color:var(--paper-dim);
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--paper-dim);transition:background .2s}
+body[data-state="listen"] .dot{background:var(--signal);animation:pulse 1s infinite}
+body[data-state="think"] .dot{background:var(--brass);animation:pulse .6s infinite}
+body[data-state="speak"] .dot{background:var(--brass)}
+body[data-state="error"] .dot{background:var(--alert)}
+@keyframes pulse{50%{opacity:.25}}
+.iconbtn{
+  background:none;border:1px solid var(--line);color:var(--paper-dim);
+  width:32px;height:32px;border-radius:4px;cursor:pointer;font-size:14px;
+}
+.iconbtn:hover{border-color:var(--brass-dim);color:var(--brass)}
+.iconbtn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+.log{flex:1;overflow-y:auto;padding:26px 22px 8px;display:flex;flex-direction:column;gap:22px}
+.turn{max-width:56ch}
+.turn .who{
+  font-family:var(--display);font-size:10px;letter-spacing:.2em;
+  color:var(--paper-dim);margin-bottom:6px;
+}
+.turn.me .who{color:var(--signal)}
+.turn.jv .who{color:var(--brass)}
+.turn p{font-size:17px;line-height:1.65}
+.turn.me p{color:var(--paper-dim)}
+.turn.jv p{color:var(--paper)}
+.turn.interim p{color:var(--signal);opacity:.65}
+.hint{color:var(--paper-dim);font-size:14px;line-height:1.7;max-width:44ch}
+.hint b{font-weight:500;color:var(--paper)}
+.hint code{font-family:var(--display);color:var(--brass);font-size:13px}
+
+/* ---------- confirm ---------- */
+.confirm{
+  margin:0 22px;border:1px solid var(--brass-dim);border-left-width:3px;
+  background:rgba(201,146,46,.07);padding:14px 16px;display:none;
+}
+.confirm.on{display:block}
+.confirm h4{font-family:var(--display);font-size:11px;letter-spacing:.18em;color:var(--brass);font-weight:600;margin-bottom:8px}
+.confirm p{font-size:15px;margin-bottom:12px}
+.confirm .row{display:flex;gap:10px}
+.btn{
+  font-family:var(--display);font-size:12px;letter-spacing:.1em;
+  padding:9px 18px;border:1px solid var(--brass);background:var(--brass);color:var(--ink);
+  cursor:pointer;font-weight:600;
+}
+.btn.ghost{background:none;color:var(--paper-dim);border-color:var(--line)}
+.btn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+/* ---------- key ---------- */
+.deck{padding:18px 22px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;align-items:center;gap:16px}
+.key{
+  position:relative;width:76px;height:76px;flex:none;border-radius:50%;
+  border:1px solid var(--brass-dim);background:var(--slate);color:var(--brass);
+  cursor:pointer;display:grid;place-items:center;
+  transition:background .15s,border-color .15s;
+}
+.key:hover{border-color:var(--brass)}
+.key:focus-visible{outline:2px solid var(--signal);outline-offset:4px}
+.key svg{width:26px;height:26px;position:relative;z-index:2}
+.key .ring{
+  position:absolute;inset:-1px;border-radius:50%;border:2px solid var(--signal);
+  transform:scale(var(--amp,1));opacity:0;transition:opacity .2s;
+}
+body[data-state="listen"] .key{background:#12332F;border-color:var(--signal);color:var(--signal)}
+body[data-state="listen"] .key .ring{opacity:.55}
+.keylabel{font-family:var(--display);font-size:11px;letter-spacing:.16em;color:var(--paper-dim)}
+.typed{
+  flex:1;background:none;border:none;border-bottom:1px solid var(--line);
+  color:var(--paper);font-family:var(--body);font-size:16px;padding:9px 2px;
+}
+.typed::placeholder{color:#4A5F62}
+.typed:focus{outline:none;border-bottom-color:var(--brass)}
+
+/* ---------- tape ---------- */
+.tape{
+  background:var(--paper);color:#2B2721;overflow-y:auto;
+  padding:0 0 24px;position:relative;
+  box-shadow:-14px 0 40px rgba(0,0,0,.4);
+}
+.tape::before,.tape::after{
+  content:'';position:sticky;left:0;display:block;height:10px;z-index:2;
+  background:radial-gradient(circle at 6px 0,transparent 5px,var(--ink) 5.5px) repeat-x;
+  background-size:12px 12px;
+}
+.tape::before{top:0;transform:rotate(180deg)}
+.tape::after{bottom:0}
+.tapehead{padding:18px 22px 12px;border-bottom:1px dashed #B9AF97}
+.tapehead h2{font-family:var(--display);font-size:12px;letter-spacing:.24em;font-weight:600;color:#6B6355}
+.tapehead .stamp{font-family:var(--display);font-size:11px;color:#8C826D;margin-top:3px}
+.card{padding:16px 22px;border-bottom:1px dashed #CFC5AD}
+.card h3{font-family:var(--display);font-size:11px;letter-spacing:.16em;color:#8C826D;font-weight:600;margin-bottom:10px}
+.kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;font-size:15px}
+.kv span:first-child{color:#5A5245}
+.kv span:last-child{font-family:var(--display);font-weight:600;font-variant-numeric:tabular-nums}
+.kv.big span:last-child{font-size:22px}
+.kv.pos span:last-child{color:#1F6B52}
+.kv.neg span:last-child{color:#9C3B26}
+.empty{padding:34px 22px;color:#8C826D;font-size:14px;line-height:1.7}
+@media(max-width:900px){
+  .tape{max-height:38dvh;box-shadow:0 -14px 40px rgba(0,0,0,.4)}
+  .log{padding-top:18px}
+}
+
+/* ---------- settings ---------- */
+.sheet{position:fixed;inset:0;background:rgba(6,12,13,.86);z-index:20;display:none;place-items:center;padding:20px}
+.sheet.on{display:grid}
+.panel{background:var(--slate);border:1px solid var(--line);width:100%;max-width:480px;padding:26px;max-height:88dvh;overflow-y:auto}
+.panel h2{font-family:var(--display);font-size:13px;letter-spacing:.2em;color:var(--brass);font-weight:600;margin-bottom:6px}
+.panel .sub{font-size:14px;color:var(--paper-dim);line-height:1.6;margin-bottom:20px}
+label{display:block;font-family:var(--display);font-size:11px;letter-spacing:.14em;color:var(--paper-dim);margin:16px 0 6px}
+input[type=text],input[type=password],select{
+  width:100%;background:var(--ink);border:1px solid var(--line);color:var(--paper);
+  padding:11px 12px;font-family:var(--body);font-size:15px;
+}
+input:focus{outline:none;border-color:var(--brass)}
+input[type=range]{width:100%;accent-color:var(--brass);margin:4px 0}
+select{font-family:var(--body)}
+.note{font-size:13px;color:var(--paper-dim);line-height:1.6;margin-top:8px}
+.panel .row{display:flex;gap:10px;margin-top:24px}
+</style>
+</head>
+<body data-state="idle">
+<div class="shell">
+
+  <section class="console">
+    <div class="bar">
+      <div class="mark">MEL</div>
+      <div class="state"><span class="dot"></span><span id="stateText">พร้อม</span></div>
+      <button class="iconbtn" id="gear" aria-label="ตั้งค่า">⚙</button>
+    </div>
+
+    <div class="log" id="log">
+      <div class="hint" id="hint">
+        แตะปุ่มไมค์แล้วพูดได้เลยค่ะ เช่น<br>
+        <b>"เมล สรุปรายรับรายจ่ายวันนี้"</b><br>
+        <b>"บันทึกรายจ่าย ค่าน้ำแข็ง 120 บาท"</b><br>
+        <b>"ของในคลังอะไรใกล้หมดบ้าง"</b><br><br>
+        ยังไม่ได้ต่อชีต — เปิด <code>⚙</code> แล้ววาง URL ของ Apps Script ก่อน
+      </div>
+    </div>
+
+    <div class="confirm" id="confirm">
+      <h4>ยืนยันก่อนเขียนลงชีต</h4>
+      <p id="confirmText"></p>
+      <div class="row">
+        <button class="btn" id="doWrite">บันทึก</button>
+        <button class="btn ghost" id="cancelWrite">ยกเลิก</button>
+      </div>
+    </div>
+
+    <div class="deck">
+      <button class="key" id="key" aria-label="แตะเพื่อพูด">
+        <span class="ring"></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>
+        </svg>
+      </button>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="keylabel" id="keyLabel">แตะเพื่อพูด</div>
+        <input class="typed" id="typed" placeholder="หรือพิมพ์สั่งงานตรงนี้ แล้วกด Enter">
+      </div>
+    </div>
+  </section>
+
+  <aside class="tape" id="tape">
+    <div class="tapehead">
+      <h2>บันทึกประจำวัน</h2>
+      <div class="stamp" id="stamp"></div>
+    </div>
+    <div id="cards"><div class="empty">ยังไม่มีข้อมูล — ลองถามเมลว่า "สรุปรายรับรายจ่ายวันนี้"</div></div>
+  </aside>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <h2>ตั้งค่า</h2>
+    <div class="sub">เมลอ่านและเขียนข้อมูลผ่าน Apps Script ของพี่เอง ข้อมูลไม่ออกไปที่อื่น</div>
+
+    <label>URL ของ Apps Script Web App</label>
+    <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="note">ต้อง Deploy แบบ Web app → Execute as: Me → Who has access: Anyone</div>
+
+    <label>รหัสลับ (ต้องตรงกับ SECRET ใน Apps Script)</label>
+    <input type="password" id="cfgSecret" placeholder="เช่น laum-9x7k">
+
+    <label>เรียกพี่ว่า</label>
+    <input type="text" id="cfgName" placeholder="เจ้านาย">
+
+    <label>Anthropic API Key (ใส่เฉพาะตอนโฮสต์เองบน Vercel)</label>
+    <input type="password" id="cfgKey" placeholder="ว่างไว้ถ้าเปิดในแอป Claude">
+
+    <label>เสียงพูด</label>
+    <select id="cfgVoice"></select>
+
+    <label>ความเร็ว <span id="rateVal">0.97</span> · ระดับเสียง <span id="pitchVal">1.08</span></label>
+    <input type="range" id="cfgRate" min="0.7" max="1.3" step="0.01" value="0.97">
+    <input type="range" id="cfgPitch" min="0.7" max="1.4" step="0.01" value="1.08">
+    <button class="btn ghost" id="tryVoice" style="margin-top:10px">ลองฟังเสียง</button>
+
+    <div class="row">
+      <button class="btn" id="saveCfg">บันทึกการตั้งค่า</button>
+      <button class="btn ghost" id="closeCfg">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const logEl=$('#log'), cardsEl=$('#cards');
+
+/* ============ config ============ */
+let CFG = { url:'', secret:'', name:'เจ้านาย', key:'', voice:'', rate:0.97, pitch:1.08 };
+async function loadCfg(){
+  try{ const r = await window.storage.get('mel:cfg'); if(r) CFG = {...CFG, ...JSON.parse(r.value)}; }catch(e){}
+  $('#cfgUrl').value=CFG.url; $('#cfgSecret').value=CFG.secret;
+  $('#cfgName').value=CFG.name; $('#cfgKey').value=CFG.key;
+  $('#cfgRate').value=CFG.rate; $('#cfgPitch').value=CFG.pitch;
+  $('#rateVal').textContent=CFG.rate; $('#pitchVal').textContent=CFG.pitch;
+  pickVoice();
+}
+$('#cfgRate').oninput=e=>{ CFG.rate=e.target.value; $('#rateVal').textContent=e.target.value; };
+$('#cfgPitch').oninput=e=>{ CFG.pitch=e.target.value; $('#pitchVal').textContent=e.target.value; };
+$('#cfgVoice').onchange=e=>{ CFG.voice=e.target.value; };
+$('#tryVoice').onclick=()=>speak('ค่ะ ' + ($('#cfgName').value.trim()||'เจ้านาย') + ' วันนี้รายรับ สามพันสองร้อยสี่สิบบาท จากสี่สิบเจ็ดรายการ เรียบร้อยค่ะ');
+async function saveCfg(){
+  CFG = { url:$('#cfgUrl').value.trim(), secret:$('#cfgSecret').value.trim(),
+          name:$('#cfgName').value.trim()||'เจ้านาย', key:$('#cfgKey').value.trim(),
+          voice:$('#cfgVoice').value, rate:$('#cfgRate').value, pitch:$('#cfgPitch').value };
+  try{ await window.storage.set('mel:cfg', JSON.stringify(CFG)); }catch(e){}
+  $('#sheet').classList.remove('on');
+  say('รับทราบค่ะ ' + CFG.name + ' ตั้งค่าเรียบร้อยแล้ว', true);
+}
+$('#gear').onclick=()=>$('#sheet').classList.add('on');
+$('#closeCfg').onclick=()=>$('#sheet').classList.remove('on');
+$('#saveCfg').onclick=saveCfg;
+
+/* ============ state ============ */
+function setState(s,t){ document.body.dataset.state=s; $('#stateText').textContent=t; }
+
+function addTurn(who,text,cls=''){
+  $('#hint')?.remove();
+  const d=document.createElement('div');
+  d.className='turn '+(who==='me'?'me':'jv')+' '+cls;
+  d.innerHTML=`<div class="who">${who==='me'?CFG.name.toUpperCase():'MEL'}</div><p></p>`;
+  d.querySelector('p').textContent=text;
+  logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight;
+  return d;
+}
+
+/* ============ voice out ============ */
+let voices=[];
+function pickVoice(){
+  voices=speechSynthesis.getVoices().filter(v=>v.lang.startsWith('th'));
+  const sel=$('#cfgVoice');
+  if(sel){
+    sel.innerHTML = voices.length
+      ? voices.map(v=>`<option value="${v.name}">${v.name}</option>`).join('')
+      : '<option value="">ไม่พบเสียงไทยในเครื่องนี้</option>';
+    if(CFG.voice) sel.value=CFG.voice;
+  }
+}
+speechSynthesis.onvoiceschanged=pickVoice; pickVoice();
+function voiceObj(){
+  return voices.find(v=>v.name===CFG.voice) || voices.find(v=>v.lang==='th-TH') || voices[0] || null;
+}
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text.replace(/[*_#`]/g,''));
+  u.lang='th-TH';
+  const v=voiceObj(); if(v) u.voice=v;
+  u.rate=Number(CFG.rate)||0.97; u.pitch=Number(CFG.pitch)||1.08;
+  u.onstart=()=>setState('speak','กำลังพูด');
+  u.onend=()=>setState('idle','พร้อม');
+  speechSynthesis.speak(u);
+}
+function say(text,quiet){ addTurn('jv',text); if(!quiet) speak(text); }
+
+/* ============ voice in ============ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec=null, listening=false, interimEl=null, audioCtx=null, rafId=null;
+
+async function meter(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(stream);
+    const an=audioCtx.createAnalyser(); an.fftSize=256; src.connect(an);
+    const buf=new Uint8Array(an.frequencyBinCount);
+    const tick=()=>{
+      an.getByteTimeDomainData(buf);
+      let peak=0; for(const b of buf) peak=Math.max(peak,Math.abs(b-128));
+      $('#key').style.setProperty('--amp',(1+Math.min(peak/60,1)*.5).toFixed(3));
+      rafId=requestAnimationFrame(tick);
+    };
+    tick();
+    return stream;
+  }catch(e){ return null; }
+}
+let micStream=null;
+function stopMeter(){
+  cancelAnimationFrame(rafId);
+  $('#key').style.setProperty('--amp',1);
+  micStream?.getTracks().forEach(t=>t.stop()); micStream=null;
+  audioCtx?.close(); audioCtx=null;
+}
+
+async function startListen(){
+  if(!SR){ say('เบราว์เซอร์นี้ยังฟังเสียงไม่ได้ค่ะ พิมพ์สั่งงานได้เลย',true); return; }
+  // ปลดล็อกเสียงพูดบน iOS ด้วย gesture นี้
+  try{ speechSynthesis.speak(new SpeechSynthesisUtterance('')); }catch(e){}
+  micStream = await meter();
+  rec=new SR(); rec.lang='th-TH'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+  let finalText='';
+  rec.onstart=()=>{ listening=true; setState('listen','กำลังฟัง'); $('#keyLabel').textContent='แตะอีกครั้งเพื่อหยุด'; };
+  rec.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalText+=t; else interim+=t;
+    }
+    if(!interimEl) interimEl=addTurn('me','','interim');
+    interimEl.querySelector('p').textContent=finalText+interim;
+    logEl.scrollTop=logEl.scrollHeight;
+  };
+  rec.onerror=e=>{
+    stopListen();
+    if(e.error==='not-allowed') say('ยังไม่ได้อนุญาตให้ใช้ไมโครโฟนค่ะ ลองเปิดหน้านี้ในเบราว์เซอร์โดยตรง',true);
+  };
+  rec.onend=()=>{
+    stopListen();
+    if(interimEl){ interimEl.classList.remove('interim'); interimEl=null; }
+    const t=finalText.trim();
+    if(t) handle(t); else setState('idle','พร้อม');
+  };
+  rec.start();
+}
+function stopListen(){
+  listening=false; stopMeter();
+  $('#keyLabel').textContent='แตะเพื่อพูด';
+  if(document.body.dataset.state==='listen') setState('idle','พร้อม');
+}
+$('#key').onclick=()=>{ listening ? rec.stop() : startListen(); };
+$('#typed').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.value.trim()){
+    const t=e.target.value.trim(); e.target.value='';
+    addTurn('me',t); handle(t);
+  }
+});
+
+/* ============ actions catalog ============ */
+const ACTIONS = `
+read_finance       — รายรับ ต้นทุน กำไร เงินสดเข้าออก  params: {range:"today"|"yesterday"|"week"|"month"|"all"}
+read_machines      — ยอดขายแยกรายตู้  params: {range:"today"|"week"|"month"}
+read_stock         — ของในโกดัง / ของใกล้หมด  params: {only_low:true|false}
+read_refill_list   — ช่องไหนต้องเติมของ แยกตามตู้  params: {}
+read_machine_alert — ตู้ไหนเงียบผิดปกติ ไม่มียอดขายนาน  params: {}
+read_tasks         — งานที่ยังไม่เสร็จ  params: {}
+write_expense      — บันทึกค่าใช้จ่าย เช่น ค่าน้ำมัน ค่าเช่าที่  params: {item, amount, category, note}
+write_stock        — เพิ่ม/ลดของในโกดัง (qty ติดลบได้)  params: {item, qty}
+write_task         — เพิ่มงานที่ต้องทำ  params: {title, due}
+chat               — คุยเฉย ๆ ไม่ต้องแตะชีต  params: {}
+`;
+
+/* ============ claude ============ */
+async function claude(system,messages){
+  const h={'Content-Type':'application/json'};
+  if(CFG.key){ h['x-api-key']=CFG.key; h['anthropic-version']='2023-06-01'; h['anthropic-dangerous-direct-browser-access']='true'; }
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',headers:h,
+    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system,messages})
+  });
+  if(!r.ok) throw new Error('claude '+r.status);
+  const d=await r.json();
+  return d.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
+}
+function parseJSON(t){
+  const s=t.replace(/```json|```/g,'').trim();
+  const a=s.indexOf('{'), b=s.lastIndexOf('}');
+  return JSON.parse(a>=0?s.slice(a,b+1):s);
+}
+
+/* ============ apps script ============ */
+function jsonp(url){
+  return new Promise((resolve,reject)=>{
+    const cb='mel_cb_'+Math.random().toString(36).slice(2);
+    const s=document.createElement('script');
+    const t=setTimeout(()=>{done();reject(new Error('timeout'))},25000);
+    function done(){ clearTimeout(t); delete window[cb]; s.remove(); }
+    window[cb]=d=>{ done(); resolve(d); };
+    s.onerror=()=>{ done(); reject(new Error('blocked')); };
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    document.body.appendChild(s);
+  });
+}
+
+async function callSheet(action,params){
+  if(!CFG.url) throw new Error('no-url');
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(CFG.url)) throw new Error('bad-url');
+  const payload={secret:CFG.secret,action,params:params||{}};
+  let d=null;
+
+  // 1) POST ปกติ — เร็วกว่า ไม่ติดลิมิตความยาว URL
+  try{
+    const r=await fetch(CFG.url,{method:'POST',mode:'cors',redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
+    const txt=await r.text();
+    if(/<html/i.test(txt)) throw new Error('not-public');
+    d=JSON.parse(txt);
+  }catch(err){
+    if(err.message==='not-public') throw err;
+    // 2) JSONP — ข้าม CORS ได้ ใช้ได้แม้เปิดไฟล์ตรง ๆ
+    const q=CFG.url+'?action='+encodeURIComponent(action)
+      +'&secret='+encodeURIComponent(CFG.secret)
+      +'&params='+encodeURIComponent(JSON.stringify(params||{}));
+    d=await jsonp(q);
+  }
+
+  if(!d) throw new Error('bad-response');
+  if(!d.ok) throw new Error(d.error||'sheet error');
+  return d.data;
+}
+
+const DIAG={
+  'no-url':'ยังไม่ได้ใส่ URL ของ Apps Script ค่ะ กดรูปเฟืองมุมขวาบนก่อนนะคะ',
+  'bad-url':'URL ไม่ถูกต้องค่ะ ต้องขึ้นต้นด้วย script.google.com/macros/s/ และลงท้ายด้วย /exec ไม่ใช่ /dev',
+  'not-public':'Apps Script ตอบกลับมาเป็นหน้า login ค่ะ แปลว่า deployment ยังไม่เปิดเป็น Anyone',
+  'blocked':'ต่อไม่ถึง Apps Script ทั้งสองทางค่ะ ลอง Deploy เป็น New version อีกครั้งนะคะ',
+  'timeout':'Apps Script ไม่ตอบกลับภายใน 25 วินาทีค่ะ อาจมีข้อมูลเยอะเกินหรือโค้ดค้าง',
+  'bad-response':'Apps Script ตอบกลับมาผิดรูปแบบค่ะ ลองรัน selfTest_ ดูว่ามี error ค้างอยู่ไหม'
+};
+
+/* ============ brain ============ */
+const history=[];
+let pending=null;
+
+async function handle(text){
+  history.push({role:'user',content:text});
+  setState('think','กำลังคิด');
+  try{
+    const routed=parseJSON(await claude(
+`คุณคือตัวจัดเส้นทางคำสั่งเสียงภาษาไทย แปลงคำสั่งของผู้ใช้เป็น action หนึ่งอัน
+วันนี้คือ ${new Date().toLocaleDateString('th-TH',{dateStyle:'full'})}
+
+ACTIONS ที่มี:
+${ACTIONS}
+
+ตอบเป็น JSON อย่างเดียว ห้ามมีข้อความอื่นหรือ markdown:
+{"action":"...","params":{...},"confirm":"ประโยคสั้นภาษาไทยสรุปสิ่งที่จะเขียนลงชีต ใส่เฉพาะเมื่อ action ขึ้นต้นด้วย write_"}
+ถ้าไม่แน่ใจจำนวนเงินหรือชื่อของ ให้เดาจากบริบทแล้วใส่ใน confirm ให้ผู้ใช้ตรวจ`,
+      history.slice(-6)));
+
+    if(routed.action?.startsWith('write_')){
+      pending=routed;
+      $('#confirmText').textContent=routed.confirm||JSON.stringify(routed.params);
+      $('#confirm').classList.add('on');
+      setState('idle','รอยืนยัน');
+      speak(routed.confirm+' ยืนยันไหมค่ะ');
+      return;
+    }
+    await run(routed);
+  }catch(e){
+    setState('error','ผิดพลาด');
+    say(DIAG[e.message] || ('ต่อข้อมูลไม่สำเร็จค่ะ ('+e.message+')'));
+  }
+}
+
+async function run(routed){
+  setState('think','กำลังดึงข้อมูล');
+  let data=null;
+  if(routed.action!=='chat') data=await callSheet(routed.action,routed.params);
+
+  setState('think','กำลังเรียบเรียง');
+  const out=parseJSON(await claude(
+`คุณคือ "เมล" เลขานุการส่วนตัวของ ${CFG.name} เป็นผู้หญิง พูดไทย ลงท้าย "ค่ะ" เสมอ
+บุคลิก: มืออาชีพ กระชับ เก็บรายละเอียดแม่น รายงานตัวเลขก่อนแล้วค่อยเสริมข้อสังเกตสั้น ๆ ถ้ามีอะไรผิดปกติให้บอกทันที
+ห้ามพูดเยิ่นเย้อ ห้ามถามกลับถ้าไม่จำเป็น เรียกผู้ใช้ว่า "${CFG.name}" ขึ้นต้นด้วย "ค่ะ ${CFG.name}" เมื่อเหมาะสม
+อ่านตัวเลขเป็นคำพูดธรรมชาติ เช่น 3240 อ่านว่า สามพันสองร้อยสี่สิบบาท
+มีข้อมูลจริงจาก Google Sheets ให้ด้านล่าง ห้ามแต่งตัวเลขเอง ถ้าไม่มีข้อมูลให้บอกตรง ๆ
+ตอบเป็น JSON อย่างเดียว ห้าม markdown:
+{"speech":"สิ่งที่พูดออกเสียง 1-3 ประโยค เป็นภาษาพูด อ่านตัวเลขให้เป็นธรรมชาติ",
+ "cards":[{"title":"หัวข้อสั้น","rows":[{"label":"...","value":"...","tone":"pos|neg|plain","big":true|false}]}]}
+cards คือสรุปตัวเลขที่แสดงบนกระดาษ ถ้าไม่มีตัวเลขให้ส่ง []`,
+    [{role:'user',content:`คำสั่ง: ${history[history.length-1].content}\naction: ${routed.action}\nข้อมูลจากชีต:\n${JSON.stringify(data,null,1)}`}]));
+
+  history.push({role:'assistant',content:out.speech});
+  say(out.speech);
+  renderCards(out.cards||[]);
+}
+
+$('#doWrite').onclick=async()=>{
+  $('#confirm').classList.remove('on');
+  const p=pending; pending=null;
+  try{ await run(p); }
+  catch(e){ setState('error','ผิดพลาด'); say('บันทึกไม่สำเร็จค่ะ ('+e.message+')'); }
+};
+$('#cancelWrite').onclick=()=>{
+  $('#confirm').classList.remove('on'); pending=null;
+  say('ยกเลิกให้แล้วค่ะ',true); setState('idle','พร้อม');
+};
+
+/* ============ tape ============ */
+function renderCards(cards){
+  if(!cards.length) return;
+  cardsEl.innerHTML='';
+  for(const c of cards){
+    const d=document.createElement('div'); d.className='card';
+    d.innerHTML=`<h3>${esc(c.title)}</h3>`;
+    for(const r of (c.rows||[])){
+      const tone=r.tone==='pos'?' pos':r.tone==='neg'?' neg':'';
+      d.innerHTML+=`<div class="kv${tone}${r.big?' big':''}"><span>${esc(r.label)}</span><span>${esc(String(r.value))}</span></div>`;
+    }
+    cardsEl.appendChild(d);
+  }
+  $('#tape').scrollTop=0;
+}
+function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+$('#stamp').textContent=new Date().toLocaleDateString('th-TH',{dateStyle:'long'});
+loadCfg();
+</script>
+</body>
+</html>

@@ -261,9 +261,21 @@ const $ = s => document.querySelector(s);
 const logEl=$('#log'), cardsEl=$('#cards');
 
 /* ============ config ============ */
+/* ============ storage (ใช้ได้ทั้งในแอป Claude และบนโดเมนตัวเอง) ============ */
+const store={
+  async get(k){
+    try{ if(window.storage) return await window.storage.get(k); }catch(e){}
+    const v=localStorage.getItem(k); return v?{key:k,value:v}:null;
+  },
+  async set(k,v){
+    try{ if(window.storage) return await window.storage.set(k,v); }catch(e){}
+    localStorage.setItem(k,v); return {key:k,value:v};
+  }
+};
+
 let CFG = { url:'', secret:'', name:'เจ้านาย', key:'', voice:'', rate:0.97, pitch:1.08 };
 async function loadCfg(){
-  try{ const r = await window.storage.get('mel:cfg'); if(r) CFG = {...CFG, ...JSON.parse(r.value)}; }catch(e){}
+  try{ const r = await store.get('mel:cfg'); if(r) CFG = {...CFG, ...JSON.parse(r.value)}; }catch(e){}
   $('#cfgUrl').value=CFG.url; $('#cfgSecret').value=CFG.secret;
   $('#cfgName').value=CFG.name; $('#cfgKey').value=CFG.key;
   $('#cfgRate').value=CFG.rate; $('#cfgPitch').value=CFG.pitch;
@@ -278,7 +290,7 @@ async function saveCfg(){
   CFG = { url:$('#cfgUrl').value.trim(), secret:$('#cfgSecret').value.trim(),
           name:$('#cfgName').value.trim()||'เจ้านาย', key:$('#cfgKey').value.trim(),
           voice:$('#cfgVoice').value, rate:$('#cfgRate').value, pitch:$('#cfgPitch').value };
-  try{ await window.storage.set('mel:cfg', JSON.stringify(CFG)); }catch(e){}
+  try{ await store.set('mel:cfg', JSON.stringify(CFG)); }catch(e){}
   $('#sheet').classList.remove('on');
   say('รับทราบค่ะ ' + CFG.name + ' ตั้งค่าเรียบร้อยแล้ว', true);
 }
@@ -416,13 +428,19 @@ chat               — คุยเฉย ๆ ไม่ต้องแตะช�
 
 /* ============ claude ============ */
 async function claude(system,messages){
+  const onOwnDomain = !location.hostname.includes('claude');
+  if(onOwnDomain && !CFG.key) throw new Error('need-key');
   const h={'Content-Type':'application/json'};
   if(CFG.key){ h['x-api-key']=CFG.key; h['anthropic-version']='2023-06-01'; h['anthropic-dangerous-direct-browser-access']='true'; }
-  const r=await fetch('https://api.anthropic.com/v1/messages',{
-    method:'POST',headers:h,
-    body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system,messages})
-  });
-  if(!r.ok) throw new Error('claude '+r.status);
+  let r;
+  try{
+    r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:h,
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,system,messages})
+    });
+  }catch(err){ throw new Error('need-key'); }
+  if(r.status===401) throw new Error('bad-key');
+  if(!r.ok) throw new Error('claude-'+r.status);
   const d=await r.json();
   return d.content.filter(c=>c.type==='text').map(c=>c.text).join('\n');
 }
@@ -479,7 +497,9 @@ const DIAG={
   'not-public':'Apps Script ตอบกลับมาเป็นหน้า login ค่ะ แปลว่า deployment ยังไม่เปิดเป็น Anyone',
   'blocked':'ต่อไม่ถึง Apps Script ทั้งสองทางค่ะ ลอง Deploy เป็น New version อีกครั้งนะคะ',
   'timeout':'Apps Script ไม่ตอบกลับภายใน 25 วินาทีค่ะ อาจมีข้อมูลเยอะเกินหรือโค้ดค้าง',
-  'bad-response':'Apps Script ตอบกลับมาผิดรูปแบบค่ะ ลองรัน selfTest_ ดูว่ามี error ค้างอยู่ไหม'
+  'bad-response':'Apps Script ตอบกลับมาผิดรูปแบบค่ะ ลองรัน selfTest_ ดูว่ามี error ค้างอยู่ไหม',
+  'need-key':'ตอนนี้อยู่บนโดเมนของเจ้านายเองแล้ว ต้องใส่ Anthropic API Key ในหน้าตั้งค่าก่อนนะคะ ดิฉันถึงจะคิดได้',
+  'bad-key':'API Key ไม่ถูกต้องหรือหมดอายุค่ะ ลองสร้างใหม่ที่ console.anthropic.com'
 };
 
 /* ============ brain ============ */
@@ -570,6 +590,14 @@ function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','
 
 $('#stamp').textContent=new Date().toLocaleDateString('th-TH',{dateStyle:'long'});
 loadCfg();
+
+// หน้านี้ถูกฝังใน iframe → ตัวครอบมักบล็อกทั้ง fetch และ script ไปโดเมนอื่น
+if(window.self!==window.top){
+  const h=$('#hint');
+  if(h) h.innerHTML='<b style="color:var(--alert)">หน้านี้กำลังถูกเปิดอยู่ในกรอบพรีวิว</b><br>'
+    +'ตัวครอบบล็อกการต่อออกไปหา Apps Script ทุกรูปแบบ ไม่ว่าโค้ดจะถูกแค่ไหนก็จะขึ้นว่าต่อไม่ถึง<br><br>'
+    +'ให้ดาวน์โหลดไฟล์ <code>mel.html</code> แล้วเปิดด้วย Chrome โดยตรง หรืออัปขึ้น Vercel ก่อนนะคะ';
+}
 </script>
 </body>
 </html>

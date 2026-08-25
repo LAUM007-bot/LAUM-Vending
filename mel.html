@@ -169,6 +169,27 @@ input[type=range]{width:100%;accent-color:var(--brass);margin:4px 0}
 select{font-family:var(--body)}
 .note{font-size:13px;color:var(--paper-dim);line-height:1.6;margin-top:8px}
 .panel .row{display:flex;gap:10px;margin-top:24px}
+
+/* ---------- ย้ายการตั้งค่าข้ามเครื่อง ---------- */
+.qrwrap{display:inline-block;padding:14px;background:var(--paper);border:1px solid var(--brass-dim)}
+.qrwrap canvas{display:block;width:100%;max-width:300px;height:auto;image-rendering:pixelated}
+#qrLink{font-size:11px;font-family:var(--display);letter-spacing:.02em}
+.scan{position:fixed;inset:0;background:var(--ink);z-index:30;display:none;flex-direction:column}
+.scan.on{display:flex}
+.scan video{flex:1;width:100%;object-fit:cover;background:#000}
+.scanbar{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.scanbar h2{font-family:var(--display);font-size:13px;letter-spacing:.2em;color:var(--brass);font-weight:600}
+.scanfoot{padding:16px 20px calc(16px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.scanframe{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(72vw,300px);aspect-ratio:1;pointer-events:none;
+  box-shadow:0 0 0 100vmax rgba(6,12,13,.55);
+}
+.scanframe i{position:absolute;width:26px;height:26px;border:2px solid var(--signal)}
+.scanframe i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.scanframe i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.scanframe i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.scanframe i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
 </style>
 </head>
 <body data-state="idle">
@@ -229,18 +250,17 @@ select{font-family:var(--body)}
     <div class="sub">เมลอ่านและเขียนข้อมูลผ่าน Apps Script ของพี่เอง ข้อมูลไม่ออกไปที่อื่น</div>
 
     <div class="row" style="margin:4px 0 6px">
-      <button class="btn ghost" id="exportCfg" style="flex:1">ส่งการตั้งค่านี้ไปมือถือ</button>
+      <button class="btn ghost" id="exportCfg" style="flex:1">แสดง QR (เครื่องนี้)</button>
+      <button class="btn ghost" id="scanCfg" style="flex:1">สแกน QR</button>
     </div>
-    <div class="note" style="margin:0 0 10px">กดแล้วจะได้ QR ให้เอามือถือสแกน (และคัดลอกลิงก์ให้ด้วย) เปิดแล้วมือถือจะตั้งค่าให้เองทั้งหมด ไม่ต้องพิมพ์คีย์ใหม่</div>
+    <div class="note" style="margin:0 0 10px">เครื่องที่ตั้งค่าไว้แล้วกด <b>แสดง QR</b> · เครื่องใหม่กด <b>สแกน QR</b> แล้วส่องกล้องไปที่จอนั้น ค่าจะถูกกรอกให้เองทั้งหมด</div>
 
     <div id="qrBox" style="display:none;margin:0 0 14px;text-align:center">
-      <div style="display:inline-block;padding:12px;background:#fff;border-radius:12px">
-        <canvas id="qrCanvas" style="display:block;width:100%;max-width:300px;height:auto;image-rendering:pixelated"></canvas>
-      </div>
-      <div class="note" style="margin-top:8px">เปิดกล้องมือถือแล้วส่องที่ QR นี้ได้เลย</div>
+      <div class="qrwrap"><canvas id="qrCanvas"></canvas></div>
+      <div class="note" style="margin-top:10px">เอาอีกเครื่องกด <b>สแกน QR</b> แล้วส่องมาที่ภาพนี้</div>
       <div class="note" style="margin-top:4px;color:var(--alert)"><b>QR นี้มีคีย์ทั้งหมดอยู่ข้างใน</b> อย่าถ่ายรูปส่งต่อหรือแชร์ให้ใคร</div>
       <div class="note" style="margin-top:10px;text-align:left">หรือใช้ลิงก์นี้ก็ได้ (คัดลอกให้แล้ว)</div>
-      <input type="text" id="qrLink" readonly onclick="this.select()" style="font-size:11px">
+      <input type="text" id="qrLink" readonly onclick="this.select()">
       <div class="row" style="margin-top:8px">
         <button class="btn ghost" id="qrHide" style="flex:1">ซ่อน QR</button>
       </div>
@@ -296,6 +316,20 @@ select{font-family:var(--body)}
       <button class="btn" id="saveCfg">บันทึกการตั้งค่า</button>
       <button class="btn ghost" id="closeCfg">ปิด</button>
     </div>
+  </div>
+</div>
+
+<div class="scan" id="scanView">
+  <div class="scanbar">
+    <h2>สแกน QR</h2>
+    <div class="note" style="margin:0;margin-left:auto" id="scanMsg">กำลังเปิดกล้อง…</div>
+  </div>
+  <div style="flex:1;position:relative;min-height:0">
+    <video id="scanVideo" playsinline muted></video>
+    <div class="scanframe"><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="scanfoot">
+    <button class="btn ghost" id="scanClose" style="width:100%">ยกเลิก</button>
   </div>
 </div>
 
@@ -365,6 +399,18 @@ const QR=(()=>{
   const totalCw=v=>rawBits(v)>>3;
   const dataCw =v=>totalCw(v)-EC[v-1]*BLK[v-1];
 
+  const maskf=(m,x,y)=>{
+    switch(m){
+      case 0: return (x+y)%2===0;
+      case 1: return y%2===0;
+      case 2: return x%3===0;
+      case 3: return (x+y)%3===0;
+      case 4: return (((y/2)|0)+((x/3)|0))%2===0;
+      case 5: return (x*y)%2+(x*y)%3===0;
+      case 6: return ((x*y)%2+(x*y)%3)%2===0;
+      default: return ((x+y)%2+(x*y)%3)%2===0;
+    }
+  };
   function alignPos(v){
     if(v===1) return [];
     const n=(v/7|0)+2, step=(v===32)?26:Math.ceil((v*4+4)/(n*2-2))*2, r=[6];
@@ -429,12 +475,15 @@ const QR=(()=>{
     for(let i=0;i<n;i++){ M.push(new Array(n).fill(false)); F.push(new Array(n).fill(false)); }
     const setF=(x,y,d)=>{ if(x>=0&&x<n&&y>=0&&y<n){ M[y][x]=d; F[y][x]=true; } };
 
-    for(const p of [[3,3],[n-4,3],[3,n-4]])          /* ตาไก่ 3 มุม */
+    /* ลำดับสำคัญ: วางเส้นจังหวะก่อน แล้วให้ตาไก่ทับลงไป
+       ถ้าสลับลำดับ เส้นจังหวะจะพาดทับขอบขวา/ขอบล่างของตาไก่จนเสียรูป
+       ข้อมูลยังถอดได้ แต่กล้องจะหาตัว QR ไม่เจอเลย */
+    for(let i=0;i<n;i++){ setF(6,i,i%2===0); setF(i,6,i%2===0); }   /* เส้นจังหวะ */
+    for(const p of [[3,3],[n-4,3],[3,n-4]])                          /* ตาไก่ 3 มุม */
       for(let dy=-4;dy<=4;dy++) for(let dx=-4;dx<=4;dx++){
         const d=Math.max(Math.abs(dx),Math.abs(dy));
         setF(p[0]+dx,p[1]+dy, d!==2&&d!==4);
       }
-    for(let i=0;i<n;i++){ setF(6,i,i%2===0); setF(i,6,i%2===0); }   /* เส้นจังหวะ */
 
     const ap=alignPos(v);                             /* จุดจัดแนว */
     for(let i=0;i<ap.length;i++) for(let j=0;j<ap.length;j++){
@@ -474,18 +523,6 @@ const QR=(()=>{
         }
     }
 
-    const maskf=(m,x,y)=>{
-      switch(m){
-        case 0: return (x+y)%2===0;
-        case 1: return y%2===0;
-        case 2: return x%3===0;
-        case 3: return (x+y)%3===0;
-        case 4: return (((y/2)|0)+((x/3)|0))%2===0;
-        case 5: return (x*y)%2+(x*y)%3===0;
-        case 6: return ((x*y)%2+(x*y)%3)%2===0;
-        default: return ((x+y)%2+(x*y)%3)%2===0;
-      }
-    };
     const applyMask=m=>{ for(let y=0;y<n;y++) for(let x=0;x<n;x++) if(!F[y][x]&&maskf(m,x,y)) M[y][x]=!M[y][x]; };
     function penalty(){
       let p=0, dark=0;
@@ -509,17 +546,407 @@ const QR=(()=>{
     return M;
   }
 
-  function draw(canvas,text){
+  function draw(canvas,text,dark,light){
     const M=build(text), n=M.length, q=4;
     const scale=Math.max(2, Math.floor(360/(n+q*2))), px=(n+q*2)*scale;
     canvas.width=px; canvas.height=px;
     const g=canvas.getContext('2d');
-    g.fillStyle='#fff'; g.fillRect(0,0,px,px);
-    g.fillStyle='#000';
+    g.fillStyle=light||'#fff'; g.fillRect(0,0,px,px);
+    g.fillStyle=dark||'#000';
     for(let y=0;y<n;y++) for(let x=0;x<n;x++) if(M[y][x]) g.fillRect((x+q)*scale,(y+q)*scale,scale,scale);
     return n;
   }
-  return {build,draw};
+
+  /* ================= ฝั่งอ่าน: ภาพจากกล้อง -> ข้อความ ================= */
+  const gpow=e=>EXP[((e%255)+255)%255];
+  const inv=a=>EXP[255-LOG[a]];
+
+  /* แก้ error ด้วย Reed-Solomon (Berlekamp-Massey + Chien + Forney)
+     จำเป็นเพราะภาพจากกล้องยังไงก็อ่านผิดบางจุด */
+  function rsCorrect(cw, ecLen){
+    const n=cw.length, syn=new Uint8Array(ecLen);
+    let bad=false;
+    for(let i=0;i<ecLen;i++){
+      let acc=0; const root=EXP[i];
+      for(let k=0;k<n;k++) acc=mul(acc,root)^cw[k];
+      syn[i]=acc; if(acc) bad=true;
+    }
+    if(!bad) return cw;
+    let C=[1], B=[1], L=0, m=1, b=1;
+    for(let r=0;r<ecLen;r++){
+      let d=syn[r];
+      for(let i=1;i<=L;i++) d^=mul(C[i]||0, syn[r-i]);
+      if(d===0){ m++; continue; }
+      const coef=mul(d, inv(b));
+      if(2*L<=r){
+        const T=C.slice();
+        for(let i=0;i<B.length;i++) C[i+m]=(C[i+m]||0)^mul(coef,B[i]);
+        L=r+1-L; B=T; b=d; m=1;
+      } else {
+        for(let i=0;i<B.length;i++) C[i+m]=(C[i+m]||0)^mul(coef,B[i]);
+        m++;
+      }
+    }
+    if(L===0 || L>(ecLen>>1)) return null;
+    const errK=[];
+    for(let k=0;k<n;k++){
+      let v=0;
+      for(let j=0;j<C.length;j++) if(C[j]) v^=mul(C[j], gpow(-k*j));
+      if(v===0) errK.push(k);
+    }
+    if(errK.length!==L) return null;
+    const Om=new Uint8Array(ecLen);
+    for(let i=0;i<ecLen;i++){
+      let acc=0;
+      for(let j=0;j<C.length && j<=i;j++) acc^=mul(syn[i-j], C[j]||0);
+      Om[i]=acc;
+    }
+    const out=cw.slice();
+    for(const k of errK){
+      let om=0;
+      for(let j=0;j<ecLen;j++) if(Om[j]) om^=mul(Om[j], gpow(-k*j));
+      let dv=0;                                  /* อนุพันธ์บน GF(2): เหลือเฉพาะพจน์ดีกรีคี่ */
+      for(let j=1;j<C.length;j+=2) if(C[j]) dv^=mul(C[j], gpow(-k*(j-1)));
+      if(dv===0) return null;
+      const e=mul(mul(gpow(k), om), inv(dv));
+      const idx=n-1-k;
+      if(idx<0||idx>=n) return null;
+      out[idx]^=e;
+    }
+    for(let i=0;i<ecLen;i++){                    /* ตรวจซ้ำว่าแก้แล้วถูกจริง */
+      let acc=0; const root=EXP[i];
+      for(let k=0;k<n;k++) acc=mul(acc,root)^out[k];
+      if(acc!==0) return null;
+    }
+    return out;
+  }
+
+  /* ทำแผนที่ว่าช่องไหนเป็นลายประจำตำแหน่ง (ไม่ใช่ข้อมูล) */
+  function funcMap(n,v){
+    const F=[]; for(let i=0;i<n;i++) F.push(new Array(n).fill(false));
+    const mk=(x,y)=>{ if(x>=0&&x<n&&y>=0&&y<n) F[y][x]=true; };
+    for(let a=0;a<8;a++) for(let b=0;b<8;b++){ mk(a,b); mk(n-1-a,b); mk(a,n-1-b); }
+    for(let i=0;i<n;i++){ mk(6,i); mk(i,6); }
+    for(let i=0;i<9;i++){ mk(8,i); mk(i,8); }
+    for(let i=0;i<8;i++){ mk(n-1-i,8); mk(8,n-1-i); }
+    if(v>=7) for(let i=0;i<6;i++) for(let j=0;j<3;j++){ mk(n-11+j,i); mk(i,n-11+j); }
+    const ap=alignPos(v);
+    for(let i=0;i<ap.length;i++) for(let j=0;j<ap.length;j++){
+      if((i===0&&j===0)||(i===0&&j===ap.length-1)||(i===ap.length-1&&j===0)) continue;
+      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) mk(ap[j]+dx, ap[i]+dy);
+    }
+    return F;
+  }
+
+  /* อ่าน format information พร้อมแก้ error (เทียบกับ 32 ค่าที่ถูกต้อง) */
+  function readFormat(M,n){
+    const read=idx=>{
+      let f=0;
+      if(idx===0){
+        for(let i=0;i<=5;i++) if(M[i][8]) f|=1<<i;
+        if(M[7][8]) f|=1<<6; if(M[8][8]) f|=1<<7; if(M[8][7]) f|=1<<8;
+        for(let i=9;i<15;i++) if(M[8][14-i]) f|=1<<i;
+      } else {
+        for(let i=0;i<8;i++) if(M[8][n-1-i]) f|=1<<i;
+        for(let i=8;i<15;i++) if(M[n-15+i][8]) f|=1<<i;
+      }
+      return f;
+    };
+    let bestVal=-1, bestD=99;
+    for(const raw of [read(0),read(1)]){
+      for(let d=0;d<32;d++){
+        let r=d; for(let i=0;i<10;i++) r=(r<<1)^((r>>>9)*0x537);
+        const valid=(((d<<10)|r)^0x5412)>>>0;
+        let diff=0, x=(raw^valid)>>>0;
+        while(x){ diff+=x&1; x>>>=1; }
+        if(diff<bestD){ bestD=diff; bestVal=d; }
+      }
+    }
+    if(bestD>3) return null;
+    return { ecc:(bestVal>>3)&3, mask:bestVal&7 };
+  }
+
+  /* เมทริกซ์ -> ข้อความ */
+  function decodeMatrix(M){
+    const n=M.length;
+    if(n<21 || (n-17)%4) return null;
+    const v=(n-17)/4;
+    if(v<1||v>40) return null;
+    const fmt=readFormat(M,n);
+    if(!fmt) return null;
+    if(fmt.ecc!==1) return null;              /* เราสร้างเฉพาะระดับ L */
+    const F=funcMap(n,v), bits=[];
+    for(let right=n-1; right>=1; right-=2){
+      if(right===6) right=5;
+      for(let vert=0; vert<n; vert++)
+        for(let j=0;j<2;j++){
+          const x=right-j, up=((right+1)&2)===0, y=up?n-1-vert:vert;
+          if(!F[y][x]) bits.push((M[y][x]!==maskf(fmt.mask,x,y))?1:0);
+        }
+    }
+    const tot=totalCw(v), cw=[];
+    for(let i=0;i+8<=bits.length && cw.length<tot;i+=8){
+      let b=0; for(let j=0;j<8;j++) b=(b<<1)|bits[i+j]; cw.push(b);
+    }
+    if(cw.length<tot) return null;
+    const nb=BLK[v-1], el=EC[v-1];
+    const numShort=nb-tot%nb, shortData=(tot/nb|0)-el;
+    const D=[],E2=[]; for(let j=0;j<nb;j++){ D.push([]); E2.push([]); }
+    let p=0;
+    for(let i=0;i<=shortData;i++) for(let j=0;j<nb;j++){
+      const len=shortData+(j<numShort?0:1); if(i<len) D[j].push(cw[p++]);
+    }
+    for(let i=0;i<el;i++) for(let j=0;j<nb;j++) E2[j].push(cw[p++]);
+    const flat=[];
+    for(let j=0;j<nb;j++){
+      const fixed=rsCorrect(D[j].concat(E2[j]), el);
+      if(!fixed) return null;
+      for(let i=0;i<D[j].length;i++) flat.push(fixed[i]);
+    }
+    const db=[]; for(const b of flat) for(let i=7;i>=0;i--) db.push((b>>>i)&1);
+    const rd=(o,len)=>{ let x=0; for(let i=0;i<len;i++) x=(x<<1)|(db[o+i]||0); return x; };
+    if(rd(0,4)!==4) return null;               /* รองรับเฉพาะ byte mode */
+    const ccb=v<10?8:16, cnt=rd(4,ccb);
+    if(4+ccb+cnt*8 > db.length) return null;
+    const by=new Uint8Array(cnt);
+    for(let i=0;i<cnt;i++) by[i]=rd(4+ccb+i*8,8);
+    try{ return new TextDecoder('utf-8',{fatal:true}).decode(by); }catch(e){ return null; }
+  }
+  /* ---- ภาพ -> เมทริกซ์ ---- */
+  function grayscale(img){
+    const d=img.data, w=img.width, h=img.height, g=new Uint8ClampedArray(w*h);
+    for(let i=0,p=0;p<g.length;i+=4,p++) g[p]=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;
+    return {g,w,h};
+  }
+  /* ตัดขาว-ดำแบบปรับตามพื้นที่ (จอสว่างไม่เท่ากันทั้งภาพ ใช้ค่าคงที่ค่าเดียวไม่ได้) */
+  function binarize(g,w,h){
+    const BS=8, bw=Math.max(1,Math.ceil(w/BS)), bh=Math.max(1,Math.ceil(h/BS));
+    const th=new Float32Array(bw*bh);
+    for(let by=0;by<bh;by++) for(let bx=0;bx<bw;bx++){
+      let mn=255,mx=0,sum=0,cnt=0;
+      const y1=Math.min(h,(by+1)*BS), x1=Math.min(w,(bx+1)*BS);
+      for(let y=by*BS;y<y1;y++) for(let x=bx*BS;x<x1;x++){
+        const v=g[y*w+x]; sum+=v; cnt++; if(v<mn)mn=v; if(v>mx)mx=v;
+      }
+      th[by*bw+bx]=(mx-mn>24)?sum/cnt:mn/2;
+    }
+    const out=new Uint8Array(w*h);
+    for(let by=0;by<bh;by++) for(let bx=0;bx<bw;bx++){
+      let s=0,c=0;
+      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+        const yy=by+dy,xx=bx+dx;
+        if(yy>=0&&yy<bh&&xx>=0&&xx<bw){ s+=th[yy*bw+xx]; c++; }
+      }
+      const t=s/c, y1=Math.min(h,(by+1)*BS), x1=Math.min(w,(bx+1)*BS);
+      for(let y=by*BS;y<y1;y++) for(let x=bx*BS;x<x1;x++) out[y*w+x]=g[y*w+x]<t?1:0;
+    }
+    return out;
+  }
+  /* ลายตาไก่มีสัดส่วน ดำ:ขาว:ดำ:ขาว:ดำ = 1:1:3:1:1 */
+  function ratioOk(c){
+    let total=0;
+    for(const x of c){ if(!x) return false; total+=x; }
+    if(total<7) return false;
+    const m=total/7, tol=m*0.5;
+    return Math.abs(c[0]-m)<=tol && Math.abs(c[1]-m)<=tol && Math.abs(c[2]-3*m)<=tol*3
+        && Math.abs(c[3]-m)<=tol && Math.abs(c[4]-m)<=tol;
+  }
+  function vertOk(bin,w,h,cx,cy){
+    if(cx<0||cx>=w) return null;
+    const col=i=>(i<0||i>=h)?0:bin[i*w+cx];
+    if(col(cy)!==1) return null;
+    let a=cy; while(col(a)===1) a--;
+    let b=cy; while(col(b)===1) b++;
+    let a2=a; while(a2>=0&&col(a2)===0) a2--;
+    let b2=b; while(b2<h&&col(b2)===0) b2++;
+    let a3=a2; while(a3>=0&&col(a3)===1) a3--;
+    let b3=b2; while(b3<h&&col(b3)===1) b3++;
+    if(!ratioOk([a2-a3,a-a2,b-a-1,b2-b,b3-b2])) return null;
+    return (a+b)/2;
+  }
+  function findFinders(bin,w,h){
+    const cand=[];
+    for(let y=0;y<h;y+=2){
+      let cur=bin[y*w], len=1;
+      const runs=[];
+      for(let x=1;x<w;x++){ const v=bin[y*w+x]; if(v===cur) len++; else { runs.push({v:cur,len,end:x}); cur=v; len=1; } }
+      runs.push({v:cur,len,end:w});
+      for(let i=0;i+4<runs.length;i++){
+        if(runs[i].v!==1) continue;
+        const c=[runs[i].len,runs[i+1].len,runs[i+2].len,runs[i+3].len,runs[i+4].len];
+        if(!ratioOk(c)) continue;
+        const cx=runs[i+4].end-c[4]-c[3]-c[2]/2, mod=(c[0]+c[1]+c[2]+c[3]+c[4])/7;
+        const cy=vertOk(bin,w,h,Math.round(cx),y);
+        if(cy===null) continue;
+        cand.push({x:cx,y:cy,mod});
+      }
+    }
+    const gs=[];
+    for(const p of cand){
+      const g=gs.find(q=>Math.abs(q.x/q.n-p.x)<p.mod*2.5 && Math.abs(q.y/q.n-p.y)<p.mod*2.5);
+      if(g){ g.x+=p.x; g.y+=p.y; g.mod+=p.mod; g.n++; }
+      else gs.push({x:p.x,y:p.y,mod:p.mod,n:1});
+    }
+    return gs.filter(g=>g.n>=2).map(g=>({x:g.x/g.n,y:g.y/g.n,mod:g.mod/g.n,n:g.n}))
+             .sort((a,b)=>b.n-a.n);
+  }
+  function solveH(src,dst){
+    const A=[],b=[];
+    for(let i=0;i<4;i++){
+      const s=src[i], d=dst[i];
+      A.push([s.x,s.y,1,0,0,0,-s.x*d.x,-s.y*d.x]); b.push(d.x);
+      A.push([0,0,0,s.x,s.y,1,-s.x*d.y,-s.y*d.y]); b.push(d.y);
+    }
+    for(let i=0;i<8;i++){
+      let p=i;
+      for(let r=i+1;r<8;r++) if(Math.abs(A[r][i])>Math.abs(A[p][i])) p=r;
+      if(Math.abs(A[p][i])<1e-9) return null;
+      [A[i],A[p]]=[A[p],A[i]]; [b[i],b[p]]=[b[p],b[i]];
+      for(let r=0;r<8;r++){
+        if(r===i) continue;
+        const f=A[r][i]/A[i][i];
+        if(!f) continue;
+        for(let c=i;c<8;c++) A[r][c]-=f*A[i][c];
+        b[r]-=f*b[i];
+      }
+    }
+    const hh=[]; for(let i=0;i<8;i++) hh.push(b[i]/A[i][i]);
+    return hh;
+  }
+  const applyH=(hh,x,y)=>{ const d=hh[6]*x+hh[7]*y+1;
+    return {x:(hh[0]*x+hh[1]*y+hh[2])/d, y:(hh[3]*x+hh[4]*y+hh[5])/d}; };
+
+  /* หาจุดจัดแนวมุมล่างขวา ช่วยแก้ภาพเอียงให้แม่นขึ้น */
+  function findAlign(bin,w,h,px,py,mod){
+    const R=Math.max(4,Math.round(mod*4));
+    let best=null;
+    for(let dy=-R;dy<=R;dy++) for(let dx=-R;dx<=R;dx++){
+      const x=Math.round(px+dx), y=Math.round(py+dy);
+      if(x<2||y<2||x>=w-2||y>=h-2) continue;
+      if(bin[y*w+x]!==1) continue;
+      const m=Math.max(1,Math.round(mod));
+      if(bin[y*w+(x-m)]!==0||bin[y*w+(x+m)]!==0||bin[(y-m)*w+x]!==0||bin[(y+m)*w+x]!==0) continue;
+      const m2=m*2;
+      if(x-m2<0||x+m2>=w||y-m2<0||y+m2>=h) continue;
+      if(bin[y*w+(x-m2)]!==1||bin[y*w+(x+m2)]!==1||bin[(y-m2)*w+x]!==1||bin[(y+m2)*w+x]!==1) continue;
+      const d=dx*dx+dy*dy;
+      if(!best||d<best.d) best={x,y,d};
+    }
+    return best;
+  }
+
+  function sampleAndDecode(bin,w,h,hh,dim,mod){
+    const M=[], big=mod>=4;
+    for(let r=0;r<dim;r++){
+      const row=[];
+      for(let c=0;c<dim;c++){
+        const p=applyH(hh,c+0.5,r+0.5);
+        const px=Math.round(p.x), py=Math.round(p.y);
+        if(px<0||py<0||px>=w||py>=h){ row.push(false); continue; }
+        if(!big) row.push(bin[py*w+px]===1);
+        else{
+          let dark=0,tot=0;
+          for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+            const xx=px+dx, yy=py+dy;
+            if(xx>=0&&xx<w&&yy>=0&&yy<h){ tot++; dark+=bin[yy*w+xx]; }
+          }
+          row.push(dark*2>tot);
+        }
+      }
+      M.push(row);
+    }
+    return decodeMatrix(M);
+  }
+
+  const pxAt=(bin,w,h,hh,cx,cy)=>{
+    const p=applyH(hh,cx+0.5,cy+0.5);
+    const x=Math.round(p.x), y=Math.round(p.y);
+    if(x<0||y<0||x>=w||y>=h) return null;
+    return bin[y*w+x]===1;
+  };
+  /* เช็คไว ๆ ว่าขนาดที่เดามาน่าจะถูก โดยดูแค่ตาไก่กับเส้นจังหวะ
+     ถูกกว่าการถอดรหัสเต็มรูปแบบมาก เลยลองได้ทุกขนาดโดยไม่อืด */
+  function quickOk(bin,w,h,hh,n){
+    const want=(dx,dy)=>{ const d=Math.max(Math.abs(dx),Math.abs(dy)); return d!==2&&d!==4; };
+    let err=0, tot=0;
+    for(const c of [[3,3],[n-4,3],[3,n-4]])
+      for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){
+        const b=pxAt(bin,w,h,hh,c[0]+dx,c[1]+dy);
+        if(b===null) return false;
+        tot++; if(b!==want(dx,dy)) err++;
+      }
+    if(err>tot*0.12) return false;
+    let terr=0, ttot=0;
+    for(let i=8;i<n-8;i++){
+      const a=pxAt(bin,w,h,hh,i,6), b=pxAt(bin,w,h,hh,6,i);
+      if(a===null||b===null) return false;
+      ttot+=2;
+      if(a!==(i%2===0)) terr++;
+      if(b!==(i%2===0)) terr++;
+    }
+    return ttot===0 || terr<=ttot*0.15;
+  }
+
+  function tryTriple(bin,w,h,tri){
+    const d=(p,q)=>Math.hypot(p.x-q.x,p.y-q.y);
+    const [A,B,C]=tri;
+    const dAB=d(A,B), dAC=d(A,C), dBC=d(B,C);
+    let tl,p1,p2;
+    if(dBC>=dAB && dBC>=dAC){ tl=A; p1=B; p2=C; }
+    else if(dAC>=dAB && dAC>=dBC){ tl=B; p1=A; p2=C; }
+    else { tl=C; p1=A; p2=B; }
+    const cross=(p1.x-tl.x)*(p2.y-tl.y)-(p1.y-tl.y)*(p2.x-tl.x);
+    const orders = cross<0 ? [[p2,p1],[p1,p2]] : [[p1,p2],[p2,p1]];
+    const mod=(A.mod+B.mod+C.mod)/3;
+    /* ความกว้างที่วัดจากเส้นสแกนแนวนอนจะเพี้ยนเมื่อภาพเอียง (45° เพี้ยนถึง √2 เท่า)
+       เลยไม่เชื่อค่าที่วัดได้ ใช้เป็นแค่ลำดับความน่าจะเป็น แล้วไล่ลองทุกขนาด */
+    let est=Math.round(d(tl,orders[0][0])/mod)+7;
+    est=Math.round((est-17)/4)*4+17;
+    const dims=[];
+    for(let dd=21; dd<=177; dd+=4) dims.push(dd);
+    dims.sort((a,b)=>Math.abs(a-est)-Math.abs(b-est));
+    for(const [tr,bl] of orders){
+      for(const dd of dims){
+        const v=(dd-17)/4;
+        const br={x:tr.x+bl.x-tl.x, y:tr.y+bl.y-tl.y};
+        const src=[{x:3.5,y:3.5},{x:dd-3.5,y:3.5},{x:3.5,y:dd-3.5},{x:dd-3.5,y:dd-3.5}];
+        const hh=solveH(src,[tl,tr,bl,br]);
+        if(!hh) continue;
+        const cand=[hh];
+        if(v>=2){                                /* ยึดจุดจัดแนวจริงจะแม่นกว่าตอนภาพเฉียง */
+          const pred=applyH(hh,dd-6.5,dd-6.5);
+          const al=findAlign(bin,w,h,pred.x,pred.y,mod);
+          if(al){
+            const h2=solveH([src[0],src[1],src[2],{x:dd-6.5,y:dd-6.5}],[tl,tr,bl,al]);
+            if(h2) cand.unshift(h2);
+          }
+        }
+        for(const hx of cand){
+          if(!quickOk(bin,w,h,hx,dd)) continue;
+          const t=sampleAndDecode(bin,w,h,hx,dd,mod);
+          if(t) return t;
+        }
+      }
+    }
+    return null;
+  }
+
+  function scanImage(img){
+    const {g,w,h}=grayscale(img);
+    const bin=binarize(g,w,h);
+    const f=findFinders(bin,w,h);
+    if(f.length<3) return null;
+    const top=f.slice(0,6), tried=[];
+    for(let a=0;a<top.length;a++) for(let b=a+1;b<top.length;b++) for(let c=b+1;c<top.length;c++)
+      tried.push([top[a],top[b],top[c]]);
+    for(const tri of tried.slice(0,12)){
+      const t=tryTriple(bin,w,h,tri);
+      if(t) return t;
+    }
+    return null;
+  }
+
+  return {build,draw,decodeMatrix,rsCorrect,funcMap,scanImage,findFinders,binarize,grayscale};
 })();
 
 function exportCfgUrl(){
@@ -568,11 +995,88 @@ $('#exportCfg').onclick=async ()=>{
   const url = exportCfgUrl();
   $('#qrLink').value = url;
   $('#qrBox').style.display='block';
-  try{ QR.draw($('#qrCanvas'), url); }
+  const css=getComputedStyle(document.documentElement);
+  const dark=(css.getPropertyValue('--ink')||'#0C1719').trim();
+  const light=(css.getPropertyValue('--paper')||'#EEE7D6').trim();
+  try{ QR.draw($('#qrCanvas'), url, dark, light); }
   catch(e){ say('ทำ QR ไม่สำเร็จค่ะ (' + e.message + ') ใช้ลิงก์ข้างล่างแทนได้เลย', true); }
   try{ await navigator.clipboard.writeText(url); }catch(e){}   /* คัดลอกไม่ได้ก็ยังมีช่องลิงก์ให้ก๊อปเอง */
 };
 $('#qrHide').onclick=()=>{ $('#qrBox').style.display='none'; };
+
+/* ============ สแกน QR ด้วยกล้องในแอป ============ */
+let scanStream=null, scanTimer=null, scanCanvas=null;
+async function applyScanned(text){
+  const m=String(text).match(/cfg=([A-Za-z0-9\-_%+/=]+)/);
+  if(!m) return false;
+  try{
+    const obj=JSON.parse(b64DecodeUtf8(decodeURIComponent(m[1])));
+    if(!obj||typeof obj!=='object'||Array.isArray(obj)) return false;
+    CFG={...CFG, ...obj};
+    await store.set('mel:cfg', JSON.stringify(CFG));
+    await loadCfg();
+    return true;
+  }catch(e){ return false; }
+}
+function closeScan(){
+  if(scanTimer){ cancelAnimationFrame(scanTimer); scanTimer=null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  const v=$('#scanVideo'); if(v) v.srcObject=null;
+  $('#scanView').classList.remove('on');
+}
+async function openScan(){
+  $('#scanView').classList.add('on');
+  $('#scanMsg').textContent='กำลังเปิดกล้อง…';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('#scanMsg').textContent='เครื่องนี้เปิดกล้องในเว็บไม่ได้ — ใช้ลิงก์แทนได้ค่ะ';
+    return;
+  }
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false });
+  }catch(e){
+    $('#scanMsg').textContent = (e&&e.name==='NotAllowedError')
+      ? 'ยังไม่ได้อนุญาตให้ใช้กล้อง' : 'เปิดกล้องไม่ได้ ('+(e&&e.name||'error')+')';
+    return;
+  }
+  const v=$('#scanVideo');
+  v.srcObject=scanStream; v.setAttribute('playsinline','');
+  try{ await v.play(); }catch(e){}
+  $('#scanMsg').textContent='ส่องไปที่ QR';
+  scanCanvas=scanCanvas||document.createElement('canvas');
+  /* ถ้าเบราว์เซอร์มีตัวอ่านบาร์โค้ดในตัวก็ใช้ก่อน เร็วกว่าและกินแบตน้อยกว่า */
+  let native=null;
+  try{ if('BarcodeDetector' in window) native=new BarcodeDetector({formats:['qr_code']}); }catch(e){}
+  let miss=0;
+  const tick=async ()=>{
+    if(!scanStream) return;
+    if(v.readyState>=2 && v.videoWidth){
+      const sc=Math.min(1, 640/Math.max(v.videoWidth, v.videoHeight));
+      const w=Math.round(v.videoWidth*sc), h=Math.round(v.videoHeight*sc);
+      if(scanCanvas.width!==w) scanCanvas.width=w;
+      if(scanCanvas.height!==h) scanCanvas.height=h;
+      const g=scanCanvas.getContext('2d',{willReadFrequently:true});
+      g.drawImage(v,0,0,w,h);
+      let text=null;
+      if(native){ try{ const r=await native.detect(scanCanvas); if(r&&r.length) text=r[0].rawValue; }catch(e){} }
+      if(!text){ try{ text=QR.scanImage(g.getImageData(0,0,w,h)); }catch(e){} }
+      if(text){
+        if(await applyScanned(text)){
+          try{ navigator.vibrate&&navigator.vibrate(60); }catch(e){}
+          closeScan();
+          say('รับค่าจาก QR เรียบร้อยแล้วค่ะ กด "บันทึกการตั้งค่า" ได้เลย', true);
+          return;
+        }
+        if(++miss===1) $('#scanMsg').textContent='QR นี้ไม่ใช่การตั้งค่าของเมล';
+      }
+    }
+    scanTimer=requestAnimationFrame(tick);
+  };
+  tick();
+}
+$('#scanCfg').onclick=openScan;
+$('#scanClose').onclick=closeScan;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&scanStream) closeScan(); });
 
 /* ============ state ============ */
 function setState(s,t){ document.body.dataset.state=s; $('#stateText').textContent=t; }

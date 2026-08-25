@@ -228,6 +228,11 @@ select{font-family:var(--body)}
     <h2>ตั้งค่า</h2>
     <div class="sub">เมลอ่านและเขียนข้อมูลผ่าน Apps Script ของพี่เอง ข้อมูลไม่ออกไปที่อื่น</div>
 
+    <div class="row" style="margin:4px 0 6px">
+      <button class="btn ghost" id="exportCfg" style="flex:1">ส่งการตั้งค่านี้ไปเครื่องอื่น</button>
+    </div>
+    <div class="note" style="margin:0 0 14px">กดแล้วลิงก์จะถูกคัดลอก ส่งไปมือถือ (เช่น แชท LINE ตัวเอง) แล้วเปิดลิงก์นั้นบนมือถือ ระบบจะตั้งค่าให้อัตโนมัติ ไม่ต้องพิมพ์คีย์ใหม่</div>
+
     <label>URL ของ Apps Script Web App</label>
     <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
     <div class="note">ต้อง Deploy แบบ Web app → Execute as: Me → Who has access: Anyone</div>
@@ -302,6 +307,32 @@ let CFG = { url:'', secret:'', name:'เจ้านาย', key:'', voice:'', r
             elKey:'', elVoice:'', elModel:'',
             azKey:'', azRegion:'southeastasia', azVoice:'th-TH-PremwadeeNeural',
             gKey:'', gVoice:'th-TH-Neural2-C' };
+
+/* ============ export/import config (ย้ายค่าไปเครื่องอื่นโดยไม่ต้องพิมพ์ใหม่) ============ */
+function b64EncodeUtf8(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64DecodeUtf8(b64){
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, c=>c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+function exportCfgUrl(){
+  const b64 = b64EncodeUtf8(JSON.stringify(CFG));
+  return location.origin + location.pathname + '#cfg=' + encodeURIComponent(b64);
+}
+async function tryImportFromHash(){
+  const m = location.hash.match(/cfg=([^&]+)/);
+  if(!m) return false;
+  try{
+    const imported = JSON.parse(b64DecodeUtf8(decodeURIComponent(m[1])));
+    await store.set('mel:cfg', JSON.stringify({...CFG, ...imported}));
+    try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+    return true;
+  }catch(e){ console.error('import cfg failed', e); return false; }
+}
 async function loadCfg(){
   try{ const r = await store.get('mel:cfg'); if(r) CFG = {...CFG, ...JSON.parse(r.value)}; }catch(e){}
   $('#cfgElKey').value=CFG.elKey; $('#cfgElVoice').value=CFG.elVoice; $('#cfgElModel').value=CFG.elModel;
@@ -331,6 +362,15 @@ async function saveCfg(){
 $('#gear').onclick=()=>$('#sheet').classList.add('on');
 $('#closeCfg').onclick=()=>$('#sheet').classList.remove('on');
 $('#saveCfg').onclick=saveCfg;
+$('#exportCfg').onclick=async ()=>{
+  const url = exportCfgUrl();
+  try{
+    await navigator.clipboard.writeText(url);
+    say('คัดลอกลิงก์ตั้งค่าแล้วค่ะ ส่งไปมือถือแล้วเปิดลิงก์นั้นได้เลย', true);
+  }catch(e){
+    prompt('คัดลอกลิงก์นี้ไปมือถือ (Ctrl+C):', url);
+  }
+};
 
 /* ============ state ============ */
 function setState(s,t){ document.body.dataset.state=s; $('#stateText').textContent=t; }
@@ -705,7 +745,11 @@ function renderCards(cards){
 function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 
 $('#stamp').textContent=new Date().toLocaleDateString('th-TH',{dateStyle:'long'});
-loadCfg();
+(async ()=>{
+  const imported = await tryImportFromHash();
+  await loadCfg();
+  if(imported) say('นำเข้าการตั้งค่าจากลิงก์เรียบร้อยแล้วค่ะ', true);
+})();
 
 // หน้านี้ถูกฝังใน iframe → ตัวครอบมักบล็อกทั้ง fetch และ script ไปโดเมนอื่น
 if(window.self!==window.top){

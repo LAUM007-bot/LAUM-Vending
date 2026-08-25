@@ -350,6 +350,12 @@ const store={
   }
 };
 
+/* Apps Script ของ MEL — ฝังไว้เลย เปิดเครื่องไหนก็ใช้ได้ทันที ไม่ต้องตั้งค่า
+   คีย์ Anthropic/Google ไม่ได้อยู่ในไฟล์นี้ (หน้านี้เปิดสาธารณะ ใครก็อ่านได้)
+   คีย์อยู่ใน Script Properties ฝั่ง Apps Script แล้วให้มันเป็นคนเรียก API ให้ */
+const MEL_URL    = 'https://script.google.com/macros/s/AKfycbx19hnOhO5Iq8r-DL8weGj5Mxmefi9U3aN0tTWRu57mwn-_Hjv_ChvhMKjtqecdPChc/exec';
+const MEL_SECRET = 'laum-9x7k';
+
 const CFG_DEFAULTS = { url:'', secret:'', name:'เจ้านาย', key:'', voice:'', rate:0.97, pitch:1.08,
             elKey:'', elVoice:'', elModel:'',
             azKey:'', azRegion:'southeastasia', azVoice:'th-TH-PremwadeeNeural',
@@ -1163,6 +1169,15 @@ async function speakAzure(text){
   await audioEl.play();
 }
 
+function playMp3B64(b64){
+  if(!b64) throw new Error('g-noaudio');
+  if(audioEl) audioEl.pause();
+  audioEl=new Audio('data:audio/mp3;base64,'+b64);
+  audioEl.onplay=()=>setState('speak','กำลังพูด');
+  audioEl.onended=()=>setState('idle','พร้อม');
+  return audioEl.play();
+}
+
 async function speakGoogle(text){
   const voice=(CFG.gVoice||'th-TH-Neural2-C').trim();
   const clean=text.replace(/[*_#`]/g,'');
@@ -1176,15 +1191,20 @@ async function speakGoogle(text){
   });
   if(!r.ok){ let m=''; try{ m=(await r.text()).slice(0,180);}catch(e){} throw new Error('g-'+r.status+(m?' '+m:'')); }
   const j=await r.json();
-  if(!j.audioContent) throw new Error('g-noaudio');
-  if(audioEl) audioEl.pause();
-  audioEl=new Audio('data:audio/mp3;base64,'+j.audioContent);
-  audioEl.onplay=()=>setState('speak','กำลังพูด');
-  audioEl.onended=()=>setState('idle','พร้อม');
-  await audioEl.play();
+  await playMp3B64(j.audioContent);
+}
+
+/* เสียงผ่าน Apps Script — คีย์ Google อยู่ฝั่งเซิร์ฟเวอร์ ไม่ต้องตั้งค่าในเครื่อง */
+async function speakServer(text){
+  const b64=await melPost('tts',{text, voice:(CFG.gVoice||'th-TH-Neural2-C').trim(), rate:Number(CFG.rate)||0.97});
+  await playMp3B64(b64);
 }
 
 async function speak(text){
+  if(!CFG.gKey && !CFG.azKey && !CFG.elKey){
+    try{ await speakServer(text); return; }
+    catch(e){ addTurn('jv','(เสียงจากเซิร์ฟเวอร์ใช้ไม่ได้: '+e.message+' — ใช้เสียงเครื่องแทน)'); }
+  }
   if(CFG.gKey){
     try{ await speakGoogle(text); return; }
     catch(e){ addTurn('jv','(เสียง Google ใช้ไม่ได้: '+e.message+' — ลองตัวถัดไป)'); }
@@ -1287,12 +1307,35 @@ write_task         — เพิ่มงานที่ต้องทำ  para
 chat               — คุยเฉย ๆ ไม่ต้องแตะชีต  params: {}
 `;
 
+/* ============ เรียก Apps Script (ใช้ text/plain เลี่ยง CORS preflight ที่ Apps Script ตอบไม่ได้) ============ */
+function melUrl(){ return (CFG.url||'').trim() || MEL_URL; }
+function melSecret(){ return (CFG.secret||'').trim() || MEL_SECRET; }
+async function melPost(action, params){
+  const r=await fetch(melUrl(),{
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({secret:melSecret(), action, params:params||{}})
+  });
+  if(!r.ok) throw new Error('gas-'+r.status);
+  const j=await r.json();
+  if(!j.ok) throw new Error(j.error||'gas-error');
+  return j.data;
+}
+
 /* ============ claude ============ */
+/* ถ้าเครื่องนี้ใส่คีย์เองไว้ก็ยิงตรง (เร็วกว่า) ไม่งั้นให้ Apps Script เป็นคนยิงให้
+   แบบหลังคือค่าเริ่มต้น เพราะไม่ต้องตั้งค่าอะไรเลยและคีย์ไม่หลุดออกมาที่หน้าเว็บ */
 async function claude(system,messages,model,maxTok){
-  const onOwnDomain = !location.hostname.includes('claude');
-  if(onOwnDomain && !CFG.key) throw new Error('need-key');
-  const h={'Content-Type':'application/json'};
-  if(CFG.key){ h['x-api-key']=CFG.key; h['anthropic-version']='2023-06-01'; h['anthropic-dangerous-direct-browser-access']='true'; }
+  if(!CFG.key){
+    try{
+      return await melPost('ai',{system,messages,model:model||'claude-sonnet-4-6',max_tokens:maxTok||1000});
+    }catch(e){
+      if(/ANTHROPIC_KEY/.test(e.message)) throw new Error('need-key');
+      throw e;
+    }
+  }
+  const h={'Content-Type':'application/json','x-api-key':CFG.key,
+           'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
   let r;
   try{
     r=await fetch('https://api.anthropic.com/v1/messages',{

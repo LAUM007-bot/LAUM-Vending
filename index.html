@@ -296,7 +296,7 @@ const SALES=[3,7,5,12,18,14,9,11,8];
 // เปลี่ยน URL เมื่อ Deploy โปรเจกต์ใหม่: แก้บรรทัดเดียวตรงนี้
 // ต้องประกาศก่อน ST เพราะ const ไม่ถูก hoist แบบ function
 // ═══════════════════════════════════════════════════════════
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyULtQ_uS5lk0A5SNLJMd4LDiH3RxuyHtepHEhD-30q71dFJy6JXCds0C3hiVyPFWMC/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbywOvRyloDD1XJxLTAHsmm7t7ev95sKtndUd6jM37NI4lMMA6xS2lTl6zQfNXV_53UlJw/exec";
 
 function loadState(){try{const s=localStorage.getItem("laum-vending-v6");if(s)return JSON.parse(s);}catch(e){}return null;}
 function saveState(){try{localStorage.setItem("laum-vending-v6",JSON.stringify({machines:ST.machines}));}catch(e){}}

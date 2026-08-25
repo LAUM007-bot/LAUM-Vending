@@ -289,6 +289,15 @@ const DEFAULT_SLOTS=[
 ];
 const SALES=[3,7,5,12,18,14,9,11,8];
 
+// ═══════════════════════════════════════════════════════════
+// Apps Script ตัวกลาง — ฝังไว้ในไฟล์เลย เปิดจากเครื่องไหนก็ใช้ได้ทันที
+// ไม่ต้องกรอกใหม่ทีละเครื่อง (เดิม URL ไปฝากอยู่ในรายชื่อตู้ใน localStorage
+// เครื่องใหม่จึงว่างเปล่า ต้องมานั่งกรอกเองทุกครั้ง)
+// เปลี่ยน URL เมื่อ Deploy โปรเจกต์ใหม่: แก้บรรทัดเดียวตรงนี้
+// ต้องประกาศก่อน ST เพราะ const ไม่ถูก hoist แบบ function
+// ═══════════════════════════════════════════════════════════
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyULtQ_uS5lk0A5SNLJMd4LDiH3RxuyHtepHEhD-30q71dFJy6JXCds0C3hiVyPFWMC/exec";
+
 function loadState(){try{const s=localStorage.getItem("laum-vending-v6");if(s)return JSON.parse(s);}catch(e){}return null;}
 function saveState(){try{localStorage.setItem("laum-vending-v6",JSON.stringify({machines:ST.machines}));}catch(e){}}
 
@@ -312,6 +321,10 @@ ST.electricityLoading=false;
 ST.analytics=null;       // รายงาน/พยากรณ์ (จาก action=analytics)
 ST.analyticsLoading=false;
 ST.machineCost=parseInt(localStorage.getItem('laum-machine-cost')||'0')||0; // ทุนตู้ (ไว้คิด ROI)
+ST.gasOverride="";       // ปกติว่าง = ใช้ GAS_URL ที่ฝังไว้
+ST.fleetLoading=false;
+// ทุกตู้ชี้ไป Apps Script ตัวเดียวกัน ไม่ต้องรอให้ผู้ใช้กรอก URL อีกแล้ว
+ST.machines=withApiUrl(ST.machines);
 
 function convertImageUrl(url){
   if(!url||!url.trim())return "";
@@ -326,6 +339,64 @@ function convertImageUrl(url){
 // ═══════════════════════════════════════════════════════════
 // <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg> ดึงข้อมูลจาก Google Sheet ผ่าน Apps Script (ไม่มีปัญหา CORS)
 // ═══════════════════════════════════════════════════════════
+
+// URL ที่ใช้จริง — ยอมให้ override ผ่านหน้าตั้งค่าได้ เผื่อสลับไปทดสอบ deployment อื่น
+// (ตั้งชื่อ apiUrl ไม่ใช่ gasUrl เพราะ fetchSheetData มีพารามิเตอร์ชื่อ gasUrl อยู่แล้ว)
+function apiUrl() {
+  const o = (typeof ST !== "undefined" && ST.gasOverride || "").trim();
+  return o || GAS_URL;
+}
+
+// ทุกตู้ใช้ Apps Script ตัวเดียวกัน — ยัด URL ให้ทุกตัวตั้งแต่ต้น
+// โค้ดเดิมที่เช็ค m.sheetUrl ทั่วไฟล์จึงทำงานต่อได้โดยไม่ต้องแก้
+function withApiUrl(list) {
+  return (list || []).map(m => ({...m, sheetUrl: apiUrl()}));
+}
+
+// ── ทะเบียนตู้จากชีต (ใช้ร่วมกันทุกเครื่อง) ──────────────────
+async function loadFleet() {
+  let j;
+  try {
+    const res = await fetch(apiUrl() + "?action=fleet", {cache:"no-store", redirect:"follow"});
+    j = await res.json();
+  } catch(e) { return false; }                    // เน็ตหลุด/Apps Script ล่ม → ใช้แคชเดิมต่อ
+  if (!j || !j.ok || !Array.isArray(j.machines) || !j.machines.length) return false;
+
+  ST.machines = j.machines.map(sv => {
+    const old = ST.machines.find(x => x.id === sv.id) || {};
+    const n   = Number(sv.slots) || 20;
+    return {
+      ...old,
+      id: sv.id, name: sv.name, loc: sv.loc, on: sv.on !== false,
+      sheet: sv.sheet, maxQty: sv.maxQty, unit: sv.unit,
+      sheetUrl: apiUrl(),
+      rev: old.rev || 0, sold: old.sold || 0,
+      // slots ตัวจริงมาจาก action=products อยู่แล้ว ตรงนี้แค่กันจอว่างระหว่างรอ
+      slots: (old.slots && old.slots.length) ? old.slots
+           : Array.from({length:n}, (_,i) => ({s:i+1, n:"ช่องที่ "+(i+1), e:"", img:"", p:15, mx:Number(sv.maxQty)||20, c:0})),
+    };
+  });
+  saveState();
+  return true;
+}
+
+// บันทึกทะเบียนตู้ขึ้นชีต (ใช้ text/plain เพื่อเลี่ยง preflight ที่ Apps Script ตอบไม่ได้)
+async function saveFleet() {
+  const payload = ST.machines.map(m => ({
+    id: m.id, name: m.name, loc: m.loc || "", sheet: m.sheet || "",
+    slots: (m.slots && m.slots.length) || 20,
+    maxQty: m.maxQty || 20, unit: m.unit || "ชิ้น", on: m.on !== false,
+  }));
+  try {
+    const res = await fetch(apiUrl(), {
+      method: "POST", redirect: "follow",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({action: "fleet_save", machines: payload}),
+    });
+    const j = await res.json();
+    return !!(j && j.ok);
+  } catch(e) { return false; }
+}
 
 // แปลง URL จากแบบต่างๆ ให้เป็น Apps Script URL
 function extractGasUrl(input) {
@@ -1226,9 +1297,15 @@ function modalHTML(){
         4. Copy <b>Web App URL</b> ที่ได้ → วางด้านล่าง
       </div>
 
+      <div style="margin-bottom:12px;padding:10px;background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.25);border-radius:8px">
+        <div style="font-size:11px;color:var(--text-dim);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">ทะเบียนตู้ (ใช้ร่วมกันทุกเครื่อง)</div>
+        <button class="btn" id="fleet-push" style="width:100%;font-size:12px">ส่งรายชื่อตู้ในเครื่องนี้ขึ้นชีต</button>
+        <div style="font-size:10px;color:var(--text-mute);margin-top:6px;line-height:1.5">ใช้ครั้งเดียวตอนย้ายมาระบบใหม่ — เครื่องที่รายชื่อตู้ถูกต้องที่สุดกดปุ่มนี้ แล้วเครื่องอื่นจะดึงไปใช้ตามอัตโนมัติ</div>
+      </div>
+
       <div style="margin-bottom:8px">
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:1px;text-transform:uppercase">Apps Script Web App URL</div>
-        <textarea id="su" rows="3" placeholder="https://script.google.com/macros/s/.../exec">${ST.su}</textarea>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:1px;text-transform:uppercase">Apps Script Web App URL (ฝังในแอปแล้ว — เว้นว่างได้)</div>
+        <textarea id="su" rows="3" placeholder="ปกติไม่ต้องกรอก — ใส่เฉพาะตอนอยากชี้ไป deployment อื่น">${ST.su}</textarea>
       </div>
 
       <div id="sheet-status" style="margin-bottom:12px;min-height:24px"></div>
@@ -1340,9 +1417,13 @@ function bind(){
     const typeMap={'30':30,'36':36,'spiral':60};
     const n=typeMap[f.n]||30;
     const typeName={'30':'ตู้ 30 ช่อง','36':'ตู้ 36 ช่อง','spiral':'ตู้เกลียว'}[f.n]||'ตู้ 30 ช่อง';
-    const nm={id:mid,name:f.name.trim(),loc:f.loc.trim(),type:typeName,on:false,rev:0,sold:0,sheetUrl:'',
+    const nm={id:mid,name:f.name.trim(),loc:f.loc.trim(),type:typeName,on:false,rev:0,sold:0,sheetUrl:apiUrl(),
       slots:Array.from({length:n},(_,i)=>({s:i+1,n:'ช่องที่ '+(i+1),e:'',img:'',p:15,mx:20,c:0}))};
     ST.machines.push(nm);ST.af={id:'',name:'',loc:'',n:'30'};ST.modal='';saveState();render();
+    // ขึ้นชีตด้วย เครื่องอื่นจะได้เห็นตู้นี้
+    saveFleet().then(ok=>showToast(ok
+      ? 'เพิ่มตู้แล้ว — เครื่องอื่นจะเห็นด้วย'
+      : 'เพิ่มในเครื่องนี้แล้ว แต่ยังไม่ขึ้นชีต (เช็คเน็ต/Deploy)', ok?'success':'error'));
   });
   on('del-machine','click',()=>{
     const m=selM(); if(!m)return;
@@ -1350,10 +1431,17 @@ function bind(){
       ST.machines=ST.machines.filter(x=>x.id!==ST.sel);
       ST.modal='';ST.view='fleet';ST.sel=null;ST.summary=null;
       saveState();render();loadFleetSummary();
+      if(ST.machines.length) saveFleet();   // ลบตัวสุดท้ายไม่ส่ง กันทะเบียนหายเกลี้ยง
       showToast('<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> ลบตู้แล้ว','success');
     });
   });
   on('su','input',e=>{ST.su=e.target.value});
+  on('fleet-push','click',()=>{
+    showToast(`ส่งรายชื่อตู้ ${ST.machines.length} ตู้ขึ้นชีต? (ทับของเดิมในชีต)`,'confirm',async()=>{
+      const ok=await saveFleet();
+      showToast(ok?'ส่งขึ้นชีตแล้ว — เครื่องอื่นจะเห็นชุดนี้':'ส่งไม่สำเร็จ — เช็คว่า Deploy โค้ดใหม่แล้วหรือยัง', ok?'success':'error');
+    });
+  });
   on('ss-fetch','click',async()=>{
     const url=ST.su.trim();
     if(!url){
@@ -1691,7 +1779,7 @@ function showScanResult(j){
 }
 
 function doLogin(){
-  if(ST.pw===PASS){ST.in=true;ST.err=false;saveLoginPersist();setTimeout(loadFleetSummary,500);}
+  if(ST.pw===PASS){ST.in=true;ST.err=false;saveLoginPersist();setTimeout(bootFleet,300);}
   else ST.err=true;
   render();
 }
@@ -1702,7 +1790,15 @@ window.addEventListener('resize',()=>{
   resizeTimer=setTimeout(()=>{if(ST.in&&ST.view==='fleet')render()},200);
 });
 render();
-if(ST.in)setTimeout(loadFleetSummary,500); // auto-load fleet summary ถ้ายัง login อยู่
+// ดึงทะเบียนตู้จากชีตก่อน (ให้ทุกเครื่องเห็นชุดเดียวกัน) แล้วค่อยสรุปยอด
+async function bootFleet(){
+  ST.fleetLoading=true;
+  const ok=await loadFleet();
+  ST.fleetLoading=false;
+  if(ok) render();
+  loadFleetSummary();
+}
+if(ST.in)setTimeout(bootFleet,300); // auto-load ถ้ายัง login อยู่
 
 // ── 🎙 MEL — ผู้ช่วยเสียง (ปุ่มไมค์ลอย + หน้าต่างเล็ก โหลด mel.html) ──
 (function(){

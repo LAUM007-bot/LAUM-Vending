@@ -79,6 +79,7 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.3);opacity:.2}}
 .orbital-hub{width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-2));display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(59,130,246,0.5);overflow:hidden}
 .orbital-hub img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;transform:scale(0.8);transform-origin:center}
+.orbital-hub video{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;background:#0a0e1a}
 
 .orbit-system{position:absolute;width:100%;height:100%;animation:orbit-rotate 60s linear infinite}.orbital-stage:hover .orbit-system,.orbital-stage:hover .machine-node{animation-play-state:paused}
 @keyframes orbit-rotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
@@ -239,6 +240,9 @@ if(!('BarcodeDetector' in window)){
 <div id="R"></div>
 <script>
 const LOGO="logo.png";
+// วิดีโอโลโก้ในวงกลมกลางหน้า Fleet — ชื่อไฟล์มีเว้นวรรค ต้องเข้ารหัสเป็น %20 ไม่งั้นโหลดไม่ขึ้น
+const HUB_VIDEO="logo%20VDO.mp4";
+let hubVidTime=0;   // จำตำแหน่งเล่นไว้ เวลา render ใหม่จะได้เล่นต่อ ไม่ใช่ตัดกลับไปเริ่มใหม่
 const ICON={
   revenue:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
   sales:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
@@ -699,6 +703,19 @@ function render(){
   else if(ST.view==="detail"&&ST.sel)html+=detailHTML(selM());
   R.innerHTML=html;
   bind();
+  restoreHubVideo();
+}
+
+/* render() เขียนทับ innerHTML ทั้งก้อน วิดีโอกลางจอเลยถูกสร้างใหม่ทุกครั้ง
+   ถ้าไม่ทำอะไร มันจะตัดกลับไปเริ่มต้นใหม่ทุกรอบที่ข้อมูลอัปเดต — กระตุกและน่ารำคาญ
+   เลยจำเวลาไว้แล้วเล่นต่อจากจุดเดิม */
+function restoreHubVideo(){
+  const v=document.getElementById('hub-vid');
+  if(!v) return;
+  if(hubVidTime>0){ try{ v.currentTime=hubVidTime; }catch(e){} }
+  v.addEventListener('timeupdate',()=>{ hubVidTime=v.currentTime; });
+  const p=v.play();
+  if(p&&p.catch) p.catch(()=>{});   // บางเบราว์เซอร์บล็อก autoplay — ปล่อยให้เป็น poster แทน
 }
 
 function topbarHTML(){
@@ -789,7 +806,10 @@ function fleetHTML(){
     <div class="orbital-stage">
       <div class="orbital-ring r2"></div>
       <div class="orbital-ring r1"></div>
-      <div class="orbital-center"><div class="orbital-hub"><img src="${LOGO}" alt="LAUM"></div></div>
+      <div class="orbital-center"><div class="orbital-hub">
+        <video id="hub-vid" src="${HUB_VIDEO}" poster="${LOGO}" autoplay loop muted playsinline preload="auto"
+               onerror="this.outerHTML='&lt;img src=&quot;${LOGO}&quot; alt=&quot;LAUM&quot;&gt;'"></video>
+      </div></div>
       <div class="orbit-system">${nodes}</div>
     </div>
     <div class="fleet-stats">

@@ -224,6 +224,41 @@ textarea{resize:none;font-family:monospace;font-size:11px}
   .rfrow{grid-template-columns:50px 2fr 1fr 1fr;font-size:11px}
   .rfrow div:nth-child(5){display:none}
 }
+
+/* ── มุมมองตู้ (cabinet view) ── */
+.cabwrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.cabstage{position:relative;perspective:1400px;flex:1 1 320px;min-width:280px}
+.cabbody{border:2px solid var(--border-hover);border-radius:14px;background:rgba(10,14,26,0.75);padding:8px}
+.cabdoor{position:absolute;inset:0;border:2px solid var(--border-hover);border-radius:14px;background:rgba(26,34,53,0.98);transform-origin:left center;transition:transform .6s cubic-bezier(.25,.8,.3,1);cursor:pointer;z-index:5;overflow:hidden}
+.cabdoor.open{transform:rotateY(-115deg);pointer-events:none}
+.cabdoor-head{height:34px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--text-dim)}
+.cabdoor-glass{position:absolute;left:12px;right:12px;top:44px;bottom:76px;border:1px solid var(--border);border-radius:8px;background:rgba(15,23,42,0.6)}
+.cabdoor-hint{position:absolute;left:0;right:0;bottom:48px;text-align:center;font-size:11px;color:var(--text-mute)}
+.cabdoor-coin{position:absolute;right:16px;bottom:76px;width:8px;height:24px;border:1px solid var(--border-hover);border-radius:2px}
+.cabdoor-bin{position:absolute;left:12px;right:12px;bottom:12px;height:28px;border:1px solid var(--border);border-radius:6px;background:rgba(15,23,42,0.6)}
+.cabrails{display:flex;gap:6px;align-items:flex-start}
+.cabrailcol{display:flex;flex-direction:column;min-width:0}
+.cabrail{border:1px solid var(--border);border-radius:9px;padding:4px;background:rgba(15,23,42,0.5);display:flex;flex-direction:column;gap:4px}
+.cabshelf{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;padding:5px 2px;border-bottom:1px solid var(--border)}
+.cabshelf:last-child{border-bottom:none}
+.cabcell{position:relative;height:clamp(52px,13vw,78px);border:1px solid var(--border);border-radius:8px;background:rgba(15,23,42,0.7);cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:border-color .15s,transform .15s}
+.cabcell:hover{border-color:var(--border-hover);transform:translateY(-1px)}
+.cabcell.sel{border-color:var(--primary);box-shadow:0 0 0 2px rgba(59,130,246,0.25)}
+.cabcell.off{opacity:.4;cursor:default}
+.cabcell img{max-width:86%;max-height:78%;object-fit:contain;display:block}
+.cabcell .cabph{display:none;align-items:center;justify-content:center;font-size:24px;color:var(--text-mute)}
+.cabqty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:30px;height:23px;padding:0 7px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:'Space Grotesk',monospace;backdrop-filter:blur(3px)}
+.cabsn{position:absolute;left:5px;top:3px;font-size:9px;color:var(--text-mute);font-weight:700}
+.cabdw{position:absolute;right:5px;top:3px;font-size:9px;color:var(--text-dim)}
+.cabcap{font-size:10px;color:var(--text-mute);text-align:center;margin-bottom:5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cabside{flex:1 1 230px;min-width:210px;display:flex;flex-direction:column;gap:10px}
+.cabdet{background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:12px;padding:12px}
+.cabdetimg{width:56px;height:56px;flex-shrink:0;border:1px solid var(--border);border-radius:9px;background:rgba(15,23,42,0.7);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cabdetimg img{max-width:88%;max-height:88%;object-fit:contain}
+.cabnote{background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:11px;padding:10px 13px;font-size:11px;color:var(--text-mute);line-height:1.6}
+.cabstage.closed{flex:0 0 auto;width:min(290px,100%);aspect-ratio:var(--cabar,900/1830)}
+.cabstage.closed .cabbody{position:absolute;inset:0;overflow:hidden;visibility:hidden}
+.cabdoor svg{border-radius:12px}
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
@@ -244,6 +279,7 @@ const LOGO="logo.png";
 const HUB_VIDEO="logo%20VDO.mp4";
 let hubVidTime=0;   // จำตำแหน่งเล่นไว้ เวลา render ใหม่จะได้เล่นต่อ ไม่ใช่ตัดกลับไปเริ่มใหม่
 const ICON={
+  cabinet:`<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="4" x2="20" y1="9" y2="9"/><line x1="8" x2="8" y1="5" y2="6"/><line x1="8" x2="8" y1="13" y2="14"/></svg>`,
   revenue:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
   sales:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
   stock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
@@ -314,6 +350,8 @@ function clearLoginPersist(){try{localStorage.removeItem("laum-login");}catch(e)
 let ST=loadState()||{machines:[{id:"M1",name:"ตู้ฟูจิ สาขา 1",loc:"โรงเรียนเขื่องในเจริญราษฎร์",on:true,rev:0,sold:0,sheetUrl:"",slots:DEFAULT_SLOTS.map(x=>({...x}))}]};
 ST.in=isLoggedInPersist();ST.pw="";ST.err=false;ST.view="fleet";ST.tab="dash";ST.modal="";ST.sel=null;
 ST.af={id:"",name:"",loc:"",n:"30"};ST.su="";ST.imgSlot=null;ST.imgInput="";
+ST.cabSel=null;ST.cabOpen=false;
+try{localStorage.removeItem('laum-cab-layout')}catch(e){}
 ST.period="today";
 ST.summary=null;
 ST.summaryLoading=false;
@@ -420,6 +458,232 @@ function convertImageUrl(url) {
   m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w400";
   return url;
+}
+
+// ── ผังตู้ 2 มิติ (มุมมองตู้) ──
+const CAB_LAYOUTS={
+  fuji30:{label:'ตู้ฟูจิ (น้ำขวด)',kind:'rail',ar:'1000/1614',rails:[
+    {w:13.5,ml:250,slots:[1,2,3,4,5,6]},
+    {w:13.5,ml:250,slots:[7,8,9,10,11,12]},
+    {w:21,ml:500,slots:[13,14,15,16,17,18]},
+    {w:21,ml:500,slots:[19,20,21,22,23,24]},
+    {w:22.4,ml:500,slots:[25,26,27,28,29,30]}]},
+  twistar24:{label:'ตู้เกลียว twistar',kind:'shelf',ar:'856/1834',shelves:[
+    [[1,2],[3,2],[5,2]],
+    [[11,2],[13,2],[15,2]],
+    [[21,2],[23,2],[25,2]],
+    [[31,1],[32,1],[33,1],[34,1],[35,1],[36,1]],
+    [[41,2],[43,2],[45,2]],
+    [[51,1],[52,1],[53,1],[54,1],[55,1],[56,1]]]}
+};
+function cabLayoutKey(m){
+  const id=(m.id||'').toUpperCase();
+  if(/^KC/.test(id))return 'twistar24';   // รหัส KC = ตู้เกลียว
+  if(/^M/.test(id)) return 'fuji30';      // รหัส M  = ตู้กดน้ำ (can)
+  if(/เกลียว|spiral/i.test(m.type||''))return 'twistar24';
+  if(m.slots&&m.slots.some(s=>s.s>30))return 'twistar24';
+  return 'fuji30';
+}
+function cabPos(m,sn){
+  const L=CAB_LAYOUTS[cabLayoutKey(m)];
+  if(L.kind==='rail'){
+    for(let i=0;i<L.rails.length;i++){const r=L.rails[i];
+      if(r.slots.indexOf(sn)>-1)return `ราง ${i+1} · รับได้ ≤${r.w} ซม. / ${r.ml} มล.`;}
+  }else{
+    for(let i=0;i<L.shelves.length;i++){const f=L.shelves[i].find(x=>x[0]===sn);
+      if(f)return `ชั้น ${i+1} · ${f[1]>1?'เกลียวคู่':'เกลียวเดี่ยว'}`;}
+  }
+  return 'ไม่อยู่ในผังตู้';
+}
+// รูปสินค้า: img/<รหัสตู้>-<ช่อง>.png ก่อน -> ถ้าไม่มีใช้ลิงก์ในชีต -> ถ้าไม่มีอีกใช้ไอคอนชนิดสินค้า
+const CAB_IMG_MISS={};   // จำไฟล์ที่ไม่มี จะได้ไม่ยิง 404 ซ้ำทุกรอบวาดจอ
+function cabImgHTML(m,s){
+  const file='img/'+m.id+'-'+s.s+'.png', alt=convertImageUrl(s.img);
+  const tried=!!CAB_IMG_MISS[file];
+  const first=tried?alt:file;
+  if(!first)return `<span class="cabph" style="display:flex">${s.e||''}</span>`;
+  const df=tried?'':file, da=tried?'':alt;
+  return `<img src="${first}" loading="lazy" referrerpolicy="no-referrer" alt="${s.n}" data-file="${df}" data-alt="${da}" onerror="cabImgFall(this)"><span class="cabph">${s.e||''}</span>`;
+}
+function cabImgFall(el){
+  if(el.dataset.file){CAB_IMG_MISS[el.dataset.file]=1;el.dataset.file='';}
+  const a=el.dataset.alt;
+  if(a){el.dataset.alt='';el.src=a;return;}
+  el.style.display='none';
+  const ph=el.nextElementSibling; if(ph)ph.style.display='flex';
+}
+function cabColor(s){
+  const p=s.mx>0?s.c/s.mx:0;
+  if(s.c===0)return['var(--danger)','239,68,68'];
+  if(p<0.25)return['var(--warning)','250,204,21'];
+  return['var(--success)','34,197,94'];
+}
+function cabCell(m,sn,span){
+  const st=span>1?`grid-column:span ${span};`:'';
+  const s=(m.slots||[]).find(x=>x.s===sn);
+  if(!s)return `<div class="cabcell off" style="${st}"><span class="cabsn">${sn}</span><span style="font-size:10px;color:var(--text-mute)">ไม่มีข้อมูล</span></div>`;
+  const [co,rgb]=cabColor(s);
+  return `<div class="cabcell${ST.cabSel===sn?' sel':''}" data-cabslot="${sn}" style="${st}" title="ช่อง ${sn} · ${s.n}">
+    ${cabImgHTML(m,s)}
+    <span class="cabsn">${sn}</span>${span>1?'<span class="cabdw">คู่</span>':''}
+    <span class="cabqty" style="color:${co};background:rgba(${rgb},0.16);border:1px solid rgba(${rgb},0.45)">${s.c}</span>
+  </div>`;
+}
+function cabDetailHTML(m,sn){
+  if(!m)return '';
+  const s=sn!=null?(m.slots||[]).find(x=>x.s===sn):null;
+  if(!s)return `<div style="font-size:12px;color:var(--text-mute);text-align:center;padding:20px 0">แตะช่องในตู้เพื่อดูรายละเอียด</div>`;
+  const [co,rgb]=cabColor(s), pct=s.mx>0?Math.round(s.c/s.mx*100):0, need=Math.max(0,s.mx-s.c);
+  const bp=(ST.analytics&&ST.analytics.byProduct)||[];
+  const pd=bp.find(x=>x.name===s.n);
+  const days=(pd&&pd.perDay>0)?Math.floor(s.c/pd.perDay):null;
+  return `<div style="display:flex;gap:10px;align-items:center;margin-bottom:11px">
+      <div class="cabdetimg">${cabImgHTML(m,s)}</div>
+      <div style="min-width:0">
+        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.n}</div>
+        <div style="font-size:10px;color:var(--text-mute);margin-top:3px">ช่อง ${s.s} · ${cabPos(m,s.s)}</div>
+      </div>
+    </div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${co}"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px">
+      <span style="color:var(--text-mute)">คงเหลือ</span><span style="color:${co};font-weight:700">${s.c}/${s.mx}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:12px">
+      <span style="color:var(--text-mute)">ต้องเติม</span><span style="font-weight:700;color:${need>0?'var(--primary)':'var(--success)'}">${need>0?'+'+need:'เต็ม'}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:12px">
+      <span style="color:var(--text-mute)">ราคา</span><span>฿${s.p}</span>
+    </div>
+    ${days!==null?`<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:12px">
+      <span style="color:var(--text-mute)">หมดใน</span><span style="color:${days<=2?'var(--danger)':days<=7?'var(--warning)':'var(--text-dim)'}">~${days} วัน</span></div>`:''}
+    <div style="margin-top:10px;font-size:10px;color:var(--text-mute);word-break:break-all">ไฟล์รูป: img/${m.id}-${s.s}.png</div>
+    <div style="display:flex;gap:7px;margin-top:10px">
+      <button class="btn" id="cab-go-refill" style="flex:1;padding:8px;font-size:11px">ไปหน้าการเติม</button>
+      <button class="btn" id="cab-set-img" style="padding:8px 11px;font-size:11px">ลิงก์รูป</button>
+    </div>`;
+}
+// หน้าตู้ — ตู้เกลียววาดตามแบบ FNX115NRB (มิลลิเมตร กว้าง 856 สูง 1834)
+function cabDoorArt(m,key){
+  if(key!=='twistar24'){
+    // หน้าตู้กดน้ำ — วาดตามแบบ front view ของตู้ (3 ชั้นโชว์ขวด + ปุ่มเลือกใต้ทุกชั้น)
+    const rows=[[123,345],[368,575],[597,786]];
+    let shelves='';
+    rows.forEach(r=>{
+      const top=r[0], bot=r[1];
+      for(let i=0;i<10;i++){
+        const x=112+i*70;
+        shelves+=`<rect x="${x+17}" y="${top}" width="18" height="30" rx="4" stroke-width="3"/>`;
+        shelves+=`<rect x="${x}" y="${top+26}" width="52" height="${bot-top-26}" rx="10" stroke-width="3" fill="rgba(250,204,21,0.09)"/>`;
+      }
+      shelves+=`<rect x="105" y="${bot+8}" width="702" height="26" rx="6" stroke-width="3" fill="rgba(15,23,42,0.6)"/>`;
+      for(let i=0;i<10;i++)shelves+=`<rect x="${118+i*70}" y="${bot+13}" width="40" height="16" rx="4" stroke-width="2" opacity="0.7"/>`;
+    });
+    return `<svg viewBox="0 0 1000 1614" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" aria-label="หน้าตู้กดน้ำ">
+      <g fill="none" stroke="var(--border-hover)" stroke-width="6">
+        <rect x="3" y="3" width="994" height="1608" rx="14" fill="rgba(15,23,42,0.55)"/>
+        <rect x="88" y="105" width="737" height="720" rx="16" fill="rgba(10,14,26,0.75)"/>
+        <g>${shelves}</g>
+        <rect x="228" y="842" width="404" height="246" rx="12" stroke-width="4" fill="rgba(226,232,240,0.05)"/>
+        <rect x="158" y="1123" width="579" height="158" rx="10" stroke-width="4" fill="rgba(10,14,26,0.85)"/>
+        <path d="M200 1210 h380" stroke-width="3" opacity="0.45"/>
+        <rect x="867" y="263" width="115" height="63" rx="6" stroke-width="4" fill="rgba(59,130,246,0.10)"/>
+        <rect x="877" y="368" width="88" height="228" rx="10" stroke-width="4"/>
+        <path d="M893 400 h56" stroke-width="3" opacity="0.6"/>
+        <rect x="862" y="684" width="120" height="88" rx="12" stroke-width="4"/>
+        <ellipse cx="922" cy="728" rx="30" ry="15" stroke-width="3" transform="rotate(-20 922 728)"/>
+        <rect x="884" y="790" width="91" height="59" rx="10" stroke-width="4"/>
+        <rect x="900" y="880" width="72" height="150" rx="14" stroke-width="4"/>
+        <path d="M895 1170 h76 l-8 78 h-60 Z" stroke-width="4" fill="rgba(10,14,26,0.85)"/>
+        <rect x="211" y="1451" width="561" height="52" rx="8" stroke-width="4" fill="rgba(10,14,26,0.85)"/>
+        <path d="M40 1560 h920" stroke-width="5" opacity="0.7"/>
+        <path d="M930 1560 v34" stroke-width="4" opacity="0.7"/>
+      </g>
+      <text x="430" y="945" text-anchor="middle" fill="var(--text-dim)" font-size="58" font-family="Sarabun,sans-serif" font-weight="700">${m.name||m.id}</text>
+      <text x="430" y="1020" text-anchor="middle" fill="var(--text-mute)" font-size="42" font-family="Sarabun,sans-serif">แตะเพื่อเปิดตู้</text>
+    </svg>`;
+  }
+  let vent='';
+  for(let i=0;i<22;i++){const x=170+i*23;vent+=`<rect x="${x}" y="1762" width="11" height="30" rx="3"/>`;}
+  let keys='';
+  for(let r=0;r<4;r++)for(let c=0;c<2;c++)keys+=`<circle cx="${692+c*52}" cy="${800+r*33}" r="9"/>`;
+  let grille='';
+  for(let i=0;i<3;i++)grille+=`<line x1="730" y1="${1447+i*26}" x2="810" y2="${1447+i*26}"/>`;
+  return `<svg viewBox="0 0 856 1834" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" aria-label="หน้าตู้เกลียว">
+    <g fill="none" stroke="var(--border-hover)" stroke-width="6">
+      <rect x="3" y="3" width="850" height="1828" rx="14" fill="rgba(15,23,42,0.55)"/>
+      <rect x="59" y="69" width="543" height="1165" rx="26" fill="rgba(10,14,26,0.75)"/>
+      <rect x="79" y="89" width="503" height="1125" rx="18" stroke-width="3" opacity="0.55"/>
+      <rect x="701" y="223" width="92" height="103" rx="8" stroke-width="4"/>
+      <circle cx="793" cy="480" r="7" stroke-width="4"/>
+      <rect x="708" y="566" width="79" height="75" rx="6" stroke-width="4"/>
+      <rect x="658" y="696" width="181" height="230" rx="12" stroke-width="4"/>
+      <rect x="675" y="712" width="147" height="56" rx="6" stroke-width="3" fill="rgba(59,130,246,0.10)"/>
+      <g stroke-width="3">${keys}</g>
+      <ellipse cx="718" cy="962" rx="30" ry="17" stroke-width="4" transform="rotate(-20 718 962)"/>
+      <circle cx="800" cy="962" r="20" stroke-width="4"/>
+      <rect x="734" y="1000" width="52" height="150" rx="26" stroke-width="4"/>
+      <rect x="191" y="1354" width="362" height="171" rx="30" fill="rgba(10,14,26,0.75)"/>
+      <path d="M215 1400 h314" stroke-width="3" opacity="0.5"/>
+      <rect x="718" y="1423" width="105" height="103" rx="8" stroke-width="4"/>
+      <g stroke-width="3" opacity="0.6">${grille}</g>
+      <g stroke-width="3" opacity="0.55">${vent}</g>
+      <path d="M40 1806 h776" stroke-width="5" opacity="0.7"/>
+    </g>
+    <text x="330" y="620" text-anchor="middle" fill="var(--text-dim)" font-size="60" font-family="Sarabun,sans-serif" font-weight="700">${m.name||m.id}</text>
+    <text x="330" y="700" text-anchor="middle" fill="var(--text-mute)" font-size="44" font-family="Sarabun,sans-serif">แตะเพื่อเปิดตู้</text>
+  </svg>`;
+}
+function cabinetHTML(m){
+  const key=cabLayoutKey(m), L=CAB_LAYOUTS[key], used={};
+  let inner='';
+  if(L.kind==='rail'){
+    inner+=`<div class="cabrails">`;
+    L.rails.forEach(r=>{
+      inner+=`<div class="cabrailcol" style="flex:${r.w} 1 0"><div class="cabcap">${r.slots[0]}–${r.slots[r.slots.length-1]}<br>≤${r.w} ซม.</div><div class="cabrail">`;
+      r.slots.forEach(sn=>{used[sn]=1;inner+=cabCell(m,sn,1)});
+      inner+=`</div></div>`;
+    });
+    inner+=`</div>`;
+  }else{
+    L.shelves.forEach(sh=>{
+      inner+=`<div class="cabshelf">`;
+      sh.forEach(x=>{used[x[0]]=1;inner+=cabCell(m,x[0],x[1])});
+      inner+=`</div>`;
+    });
+  }
+  const extra=(m.slots||[]).filter(s=>!used[s.s]);
+  const need=(m.slots||[]).reduce((a,s)=>a+Math.max(0,s.mx-s.c),0);
+  const outN=(m.slots||[]).filter(s=>s.c===0).length;
+  const lowN=(m.slots||[]).filter(s=>s.c>0&&s.mx>0&&s.c/s.mx<0.25).length;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:11px">
+      <div style="font-size:11px;color:var(--text-mute)">ผัง: ${L.label}</div>
+      <button class="btn" id="cab-toggle" style="padding:7px 12px;font-size:11px">${ST.cabOpen?'ปิดตู้':'เปิดตู้'}</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      <div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:11px;padding:9px 11px">
+        <div style="font-size:10px;color:var(--text-mute)">ต้องเติม</div>
+        <div style="font-size:17px;font-weight:700;font-family:'Space Grotesk',monospace">${need}</div></div>
+      <div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:11px;padding:9px 11px">
+        <div style="font-size:10px;color:var(--text-mute)">ช่องหมด</div>
+        <div style="font-size:17px;font-weight:700;color:var(--danger);font-family:'Space Grotesk',monospace">${outN}</div></div>
+      <div style="background:rgba(15,23,42,0.6);border:1px solid var(--border);border-radius:11px;padding:9px 11px">
+        <div style="font-size:10px;color:var(--text-mute)">ใกล้หมด</div>
+        <div style="font-size:17px;font-weight:700;color:var(--warning);font-family:'Space Grotesk',monospace">${lowN}</div></div>
+    </div>
+    <div class="cabwrap">
+      <div class="cabstage${ST.cabOpen?'':' closed'}" id="cab-stage" style="--cabar:${L.ar||'900/1830'}">
+        <div class="cabbody">${inner}</div>
+        <div class="cabdoor${ST.cabOpen?' open':''}" id="cab-door">${cabDoorArt(m,key)}</div>
+      </div>
+      <div class="cabside">
+        <div class="cabdet" id="cab-detail">${cabDetailHTML(m,ST.cabSel)}</div>
+        <div class="cabnote">รูปสินค้า: วางไฟล์ PNG พื้นหลังใสชื่อ <b style="color:var(--text-dim)">img/${m.id}-&lt;เบอร์ช่อง&gt;.png</b> ในโปรเจกต์แล้ว push ขึ้น Vercel · ถ้าไม่มีไฟล์จะใช้ลิงก์รูปในชีตแทน</div>
+      </div>
+    </div>
+    ${extra.length?`<div style="margin-top:14px">
+      <div style="font-size:11px;color:var(--text-mute);margin-bottom:7px">ช่องที่ไม่อยู่ในผังตู้ (${extra.length})</div>
+      <div class="cabshelf" style="border-bottom:none">${extra.map(s=>cabCell(m,s.s,1)).join('')}</div>
+    </div>`:''}`;
 }
 
 // แปลง product objects จาก Apps Script → slots array
@@ -895,7 +1159,7 @@ function detailHTML(m){
       </div>
     </div>
     <div class="tabs">
-      ${['dash','stock','refill','wh','elec','stats'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cycle,ICON.warehouse,ICON.bolt,ICON.chart][i]}${['แดชบอร์ด','สต็อก','การเติม','โกดัง','ค่าไฟ','รายงาน'][i]}</button>`).join('')}
+      ${['dash','stock','cab','refill','wh','elec','stats'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cabinet,ICON.cycle,ICON.warehouse,ICON.bolt,ICON.chart][i]}${['แดชบอร์ด','สต็อก','มุมมองตู้','การเติม','โกดัง','ค่าไฟ','รายงาน'][i]}</button>`).join('')}
     </div>`;
   if(ST.tab==="dash"){
     h+=healthCard(m,ti,to,alerts,lows);   // ⭐ การ์ดสุขภาพตู้ (polish)
@@ -1017,6 +1281,9 @@ function detailHTML(m){
     <div style="background:rgba(15,23,42,0.5);border:1px solid var(--border);border-radius:11px;padding:11px 14px;margin-top:14px;font-size:11px;color:var(--text-mute);text-align:center">
       <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg> คลิกที่รูปสินค้าเพื่อใส่/เปลี่ยน URL รูป
     </div>`;
+  }
+  if(ST.tab==="cab"){
+    h+=cabinetHTML(m);
   }
   if(ST.tab==="refill"){
     const total=m.slots.reduce((a,s)=>a+(s.mx-s.c),0);
@@ -1509,6 +1776,34 @@ function bind(){
       }
       showToast(`<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> ช่อง ${slot} รีเซ็ทแล้ว`,'success');
     });
+  }));
+
+  // ── มุมมองตู้ ──
+  function bindCabDetail(){
+    const g=document.getElementById('cab-go-refill');
+    if(g)g.onclick=()=>{ST.tab='refill';render()};
+    const i=document.getElementById('cab-set-img');
+    if(i)i.onclick=()=>{const mm=selM();if(!mm||ST.cabSel==null)return;
+      const s=mm.slots.find(x=>x.s===ST.cabSel);
+      ST.imgSlot=ST.cabSel;ST.imgInput=s?(s.img||''):'';ST.modal='img';render()};
+  }
+  bindCabDetail();
+  function cabSetOpen(v){
+    ST.cabOpen=v;
+    const d=document.getElementById('cab-door'), st=document.getElementById('cab-stage'), b=document.getElementById('cab-toggle');
+    if(st)st.classList.toggle('closed',!v);
+    if(d)d.classList.toggle('open',v);
+    if(b)b.textContent=v?'ปิดตู้':'เปิดตู้';
+  }
+  const cabDoor=document.getElementById('cab-door');
+  if(cabDoor)cabDoor.addEventListener('click',()=>cabSetOpen(true));
+  on('cab-toggle','click',()=>cabSetOpen(!ST.cabOpen));
+  document.querySelectorAll('[data-cabslot]').forEach(el=>el.addEventListener('click',()=>{
+    ST.cabSel=parseInt(el.dataset.cabslot);
+    document.querySelectorAll('[data-cabslot]').forEach(x=>x.classList.toggle('sel',parseInt(x.dataset.cabslot)===ST.cabSel));
+    const box=document.getElementById('cab-detail');
+    if(box)box.innerHTML=cabDetailHTML(selM(),ST.cabSel);
+    bindCabDetail();
   }));
 
   // ── Print refill list (Sunmi 58mm thermal) ──

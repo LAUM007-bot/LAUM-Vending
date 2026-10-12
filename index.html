@@ -1345,7 +1345,7 @@ function detailHTML(m){
       <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(168,139,250,0.06);border:1px solid rgba(168,139,250,0.2);border-radius:12px;padding:12px 16px;margin-bottom:4px;gap:8px;flex-wrap:wrap">
         <div>
           <div style="font-size:14px;font-weight:700"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg> สต็อกโกดัง</div>
-          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">คลังกลาง · นับเป็นขวด แสดงเป็นลัง</div>
+          <div style="font-size:11px;color:var(--text-mute);margin-top:2px">คลังกลาง · หน่วยตามชีต config</div>
         </div>
         <button class="btn" id="btn-wh-refresh" style="padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:6px;border-color:rgba(168,139,250,0.4);color:#a78bfa;background:rgba(168,139,250,0.08)">${ICON.cycle}<span>รีเฟรช</span></button>
       </div>`;
@@ -1376,7 +1376,7 @@ function detailHTML(m){
         </div>
       </div>`;
       if(lowCount){
-        h+=`<div class="alert" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:var(--danger);margin-bottom:4px">${ICON.alert}<span>${lowCount} ชนิดเหลือต่ำกว่า 1 ลัง — ควรสั่งของเพิ่ม</span></div>`;
+        h+=`<div class="alert" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);color:var(--danger);margin-bottom:4px">${ICON.alert}<span>${lowCount} ชนิดเหลือไม่ถึง 1 หน่วยซื้อ — ควรสั่งของเพิ่ม</span></div>`;
       }
       h+=`<div class="rfrow hdr" style="grid-template-columns:2fr 1.2fr 1fr 1fr">
         <span>สินค้า</span>
@@ -1386,16 +1386,17 @@ function detailHTML(m){
       </div>`;
       wh.products.forEach(p=>{
         const low=p.bottles<p.bottlesPerPack;
-        const crateStr=p.packs>0?(p.packs+' ลัง'+(p.remainder>0?(' '+p.remainder+' ขวด'):'')):(p.bottles+' ขวด');
+        const U=p.unit||'ลัง',SU=p.sub||'ขวด';
+        const crateStr=p.packs>0?(p.packs+' '+U+(p.remainder>0?(' '+p.remainder+' '+SU):'')):(p.bottles+' '+SU);
         const val=p.bottles*p.costPerBottle;
         h+=`<div class="rfrow${low?' urg':''}" style="grid-template-columns:2fr 1.2fr 1fr 1fr">
           <div>
             <div style="font-size:12px;font-weight:600">${p.name}</div>
-            <div style="font-size:10px;color:var(--text-mute);margin-top:2px">${p.bottlesPerPack} ขวด/ลัง</div>
+            <div style="font-size:10px;color:var(--text-mute);margin-top:2px">${p.bottlesPerPack} ${SU}/${U}${p.inConfig===false?' · <span style="color:var(--danger)">ยังไม่มีในชีต config</span>':''}</div>
           </div>
           <div style="text-align:center">
             <div style="font-size:13px;font-weight:700;color:${low?'var(--danger)':'var(--success)'}">${crateStr}</div>
-            <div style="font-size:10px;color:var(--text-mute)">${p.bottles} ขวด</div>
+            <div style="font-size:10px;color:var(--text-mute)">${p.bottles} ${SU}</div>
           </div>
           <div style="text-align:center;font-size:12px;color:var(--text-dim)">฿${(p.costPerBottle||0).toFixed(2)}</div>
           <div style="text-align:right;font-size:13px;font-weight:700;color:var(--warning);font-family:'Space Grotesk',monospace">฿${Math.round(val).toLocaleString()}</div>

@@ -1063,7 +1063,7 @@ function openOwner(){
       <div class="actions"><button class="btn primary" type="submit">ไปเลือกจุดบนแผนที่</button></div>
       <p class="sample">ตู้ใหม่จะถูกเพิ่มในชีต Fleet ส่วนแท็บสต็อกของตู้ยังต้องสร้างเองเหมือนเดิม</p>
     </form>
-    <div class="actions" style="margin-top:14px"><button class="btn" type="button" id="ownerOut">ออกจากโหมดเจ้าของ</button></div>`;
+    <div class="actions" style="margin-top:14px"><a class="btn" href="../">กลับหน้าจัดการ LAUM</a><button class="btn" type="button" id="ownerOut">ออกจากโหมดเจ้าของ</button></div>`;
   sheet.hidden=false;
   sheetBody.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>{ const m=all.find(x=>x.id===b.dataset.place); startPlacing({id:m.id,name:m.name,model:m.model}); });
   sheetBody.querySelectorAll('[data-remove]').forEach(b=>b.onclick=async()=>{
@@ -1171,6 +1171,8 @@ addEventListener('resize',resize); resize();
 rebuildSites();
 buildScenery();
 $('loading').style.opacity='0'; setTimeout(()=>$('loading').remove(),450);
+// ปุ่ม "แผนที่ 3D" ในหน้าจัดการลิงก์มาที่ /map/#owner → เปิดหน้าเจ้าของให้เลย
+if(location.hash==='#owner'){ openOwner(); history.replaceState(null,'',location.pathname); }
 async function refresh(force){
   const before=JSON.stringify(fleet);
   await loadFleet();

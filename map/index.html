@@ -239,8 +239,8 @@ function syncLive(){
     ? `ข้อมูลสด · อัปเดต ${updatedAt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}${isOwner?' · โหมดเจ้าของ':''}`
     : 'ออฟไลน์ · แสดงตำแหน่งตู้อย่างเดียว';
 }
-function machinesNow(){
-  return fleet.filter(m=>m.on!==false).map(m=>{
+function machinesNow(includeOff=false){
+  return fleet.filter(m=>includeOff || m.on!==false).map(m=>{
     const d = DEFAULT_PLACES[m.id] || {};
     const has = m.lat!=null && m.lng!=null && m.lat!=='' && !isNaN(m.lat);
     const model = MODELS[m.model] ? m.model : (d.model || (/^KC/i.test(m.id) ? 'fuji_spiral' : 'fuji_can'));
@@ -1048,13 +1048,13 @@ function openOwner(){
     };
     return;
   }
-  const all=machinesNow();
+  const all=machinesNow(true);
   const sum=all.reduce((a,m)=>({sales:a.sales+(m.today?.sales||0),rev:a.rev+(m.today?.revenue||0),pro:a.pro+(m.today?.profit||0)}),{sales:0,rev:0,pro:0});
-  const where=m=>{ const s=SITES.find(s=>s.machines.some(x=>x.id===m.id)); return s?`อยู่ที่${s.name}`:'ยังไม่ได้วางบนแผนที่'; };
+  const where=m=>{ if(m.on===false) return 'ปิดใช้งานอยู่ · ลูกค้ายังไม่เห็น'; const s=SITES.find(s=>s.machines.some(x=>x.id===m.id)); return s?`อยู่ที่${s.name}`:'ยังไม่ได้วางบนแผนที่'; };
   sheetBody.innerHTML=`<div class="kicker">โหมดเจ้าของ</div><h2>ตู้ทั้งหมด</h2>
     <div class="kpi"><div><span>ขายวันนี้</span><b>${sum.sales}</b></div><div><span>ยอดขาย</span><b>${baht(sum.rev)}</b></div><div><span>กำไร</span><b>${baht(sum.pro)}</b></div></div>
     <ul class="flist">${all.map(m=>`<li class="frow"><div><b>${esc(m.name)} <small>(${esc(m.id)})</small></b><span>${esc(MODELS[m.model].label)} · ${where(m)}</span></div>
-      <div class="actions"><button class="btn small" type="button" data-place="${esc(m.id)}">${m.lat!=null?'ย้าย':'วาง'}</button>${m.lat!=null?`<button class="btn small" type="button" data-remove="${esc(m.id)}">เอาออก</button>`:''}</div></li>`).join('')}</ul>
+      <div class="actions"><button class="btn small" type="button" data-place="${esc(m.id)}">${m.on===false?'วาง + เปิดใช้':m.lat!=null?'ย้าย':'วาง'}</button>${m.lat!=null&&m.on!==false?`<button class="btn small" type="button" data-remove="${esc(m.id)}">เอาออก</button>`:''}</div></li>`).join('')}</ul>
     <h3>เพิ่มตู้ใหม่</h3>
     <form id="newForm">
       <div class="field"><label for="nId">รหัสตู้ (ตรงกับบอร์ด เช่น M3)</label><input id="nId" required pattern="[A-Za-z0-9_\\-]{1,20}" autocomplete="off"></div>
@@ -1065,7 +1065,7 @@ function openOwner(){
     </form>
     <div class="actions" style="margin-top:14px"><a class="btn" href="../">กลับหน้าจัดการ LAUM</a><button class="btn" type="button" id="ownerOut">ออกจากโหมดเจ้าของ</button></div>`;
   sheet.hidden=false;
-  sheetBody.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>{ const m=all.find(x=>x.id===b.dataset.place); startPlacing({id:m.id,name:m.name,model:m.model}); });
+  sheetBody.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>{ const m=all.find(x=>x.id===b.dataset.place); startPlacing({id:m.id,name:m.name,model:m.model,off:m.on===false}); });
   sheetBody.querySelectorAll('[data-remove]').forEach(b=>b.onclick=async()=>{
     const m=all.find(x=>x.id===b.dataset.remove);
     if(b.dataset.armed!=='1'){ b.dataset.armed='1'; b.textContent='ยืนยันเอาออก'; return; }
@@ -1094,21 +1094,24 @@ function startPlacing(p){
 function renderBar(){
   const p=placing; bar.hidden=false;
   const ll = p.at ? toLL(p.at.x,p.at.z) : null;
-  bar.innerHTML = `<p>${p.at?`วาง ${esc(p.name)} ตรงนี้?`:`แตะบนแผนที่ตรงจุดที่ตั้ง ${esc(p.name)}`}
-      <small>${p.at?`${ll[0].toFixed(6)}, ${ll[1].toFixed(6)} · ตู้จะหันหน้าออกถนนที่ใกล้ที่สุด`:`${esc(MODELS[p.model].label)} · ซูมเข้าไปใกล้ๆ ได้ก่อนแตะ`}</small></p>
+  const note = p.snap ? `รวมกับ${esc(p.snap.name)} วางข้างตู้ที่มีอยู่` : 'ตู้จะหันหน้าออกถนนที่ใกล้ที่สุด';
+  bar.innerHTML = `<p>${p.at?(p.snap?`วาง ${esc(p.name)} ที่${esc(p.snap.name)}?`:`วาง ${esc(p.name)} ตรงนี้?`):`แตะบนแผนที่ตรงจุดที่ตั้ง ${esc(p.name)}`}
+      <small>${p.at?`${ll[0].toFixed(6)}, ${ll[1].toFixed(6)} · ${note}`:`${esc(MODELS[p.model].label)} · แตะใกล้จุดที่มีตู้อยู่แล้วจะรวมเป็นจุดเดียวกัน`}${p.off?' · ตู้นี้จะถูกเปิดใช้ ลูกค้าจะเห็นบนแผนที่':''}</small></p>
     <div class="actions">${p.at?`<button class="btn primary small" type="button" id="pSave">บันทึกตำแหน่ง</button>`:''}<button class="btn small" type="button" id="pCancel">ยกเลิก</button></div>`;
   $('pCancel').onclick=cancelPlacing;
   if(p.at) $('pSave').onclick=savePlacing;
 }
 function cancelPlacing(){ placing=null; bar.hidden=true; stage.classList.remove('placing'); if(ghost){ scene.remove(ghost); ghost=null; } }
 async function savePlacing(){
-  const p=placing, [lat,lng]=toLL(p.at.x,p.at.z);
+  const p=placing, [lat,lng]=p.snap ? [p.snap.lat,p.snap.lng] : toLL(p.at.x,p.at.z);
   $('pSave').disabled=true; $('pSave').textContent='กำลังบันทึก…';
-  const j=await gas({action:'map_place', key:ownerKey, id:p.id, name:p.isNew?p.name:undefined, model:p.model, lat:+lat.toFixed(7), lng:+lng.toFixed(7)});
+  const j=await gas({action:'map_place', key:ownerKey, id:p.id, name:p.isNew?p.name:undefined, model:p.model, lat:+lat.toFixed(7), lng:+lng.toFixed(7), enable:true});
   if(j&&j.ok){
     cancelPlacing(); toast(`บันทึกตำแหน่ง ${p.name} แล้ว`);
     await refresh(true);
-    const s=SITES.find(s=>s.machines.some(m=>m.id===p.id)); if(s) openSite(s, s.machines.find(m=>m.id===p.id));
+    const s=SITES.find(s=>s.machines.some(m=>m.id===p.id));
+    if(s) openSite(s, s.machines.find(m=>m.id===p.id));
+    else toast(`บันทึกแล้ว แต่ ${p.name} ยังไม่ขึ้นบนแผนที่ ลองตรวจช่อง "เปิดใช้" ในชีต Fleet`);
   }else{ $('pSave').disabled=false; $('pSave').textContent='บันทึกตำแหน่ง'; toast(j?.error||'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง'); }
 }
 const groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0), hitPt=new THREE.Vector3();
@@ -1116,9 +1119,14 @@ function placeAt(e){
   setRay(e);
   if(!ray.ray.intersectPlane(groundPlane,hitPt)) return;
   if(Math.abs(hitPt.x)>HALF || Math.abs(hitPt.z)>HALF){ toast('จุดนี้อยู่นอกแผนที่'); return; }
-  placing.at={x:hitPt.x,z:hitPt.z};
+  // tapped close to an existing site (other than this machine alone) → join it instead of making a new kiosk
+  const near=SITES.filter(s=>!(s.machines.length===1 && s.machines[0].id===placing.id))
+    .map(s=>({s,d:Math.hypot(s.cx-hitPt.x,s.cz-hitPt.z)})).sort((a,b)=>a.d-b.d)[0];
+  placing.snap = near && near.d<35 ? near.s : null;
+  const gx = placing.snap ? placing.snap.cx : hitPt.x, gz = placing.snap ? placing.snap.cz : hitPt.z;
+  placing.at={x:gx,z:gz};
   if(!ghost){ ghost=buildVending(placing.model,[],true,[]); scene.add(ghost); }
-  const b=nearestRoad(hitPt.x,hitPt.z); ghost.position.set(hitPt.x,0,hitPt.z); ghost.rotation.y=Math.atan2(b.px-hitPt.x,b.pz-hitPt.z);
+  const b=nearestRoad(gx,gz); ghost.position.set(gx,0,gz); ghost.rotation.y=Math.atan2(b.px-gx,b.pz-gz);
   renderBar();
 }
 

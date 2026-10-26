@@ -96,6 +96,8 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min
 .mn-rev{font-size:11px;color:var(--success);font-weight:700;margin-top:1px;font-family:'Space Grotesk',monospace}
 .mn-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 8px rgba(34,197,94,0.6)}
 .mn-dot.off{background:var(--text-mute);box-shadow:none}
+.mn-circle.maint{border-color:#f97316;box-shadow:0 0 16px rgba(249,115,22,0.45)}
+.mn-circle.maint .mn-stat{color:#fb923c;font-weight:600}
 .mn-alert{position:absolute;top:-4px;left:-4px;min-width:22px;height:22px;border-radius:50%;background:var(--danger);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);padding:0 5px}
 .mn-add{font-size:32px;font-weight:300;color:var(--text-mute)}
 
@@ -279,6 +281,7 @@ const LOGO="logo.png";
 const HUB_VIDEO="logo%20VDO.mp4";
 let hubVidTime=0;   // จำตำแหน่งเล่นไว้ เวลา render ใหม่จะได้เล่นต่อ ไม่ใช่ตัดกลับไปเริ่มใหม่
 const ICON={
+  wrench:`<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
   cabinet:`<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="4" x2="20" y1="9" y2="9"/><line x1="8" x2="8" y1="5" y2="6"/><line x1="8" x2="8" y1="13" y2="14"/></svg>`,
   revenue:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
   sales:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
@@ -747,9 +750,10 @@ async function fetchSheetData(machineId, gasUrl) {
   const slots = productsToSlots(json.products);
   const now = new Date().toLocaleTimeString("th-TH", {hour:"2-digit", minute:"2-digit"});
   ST.machines = ST.machines.map(m =>
-    m.id === machineId ? {...m, slots, sheetUrl: gasUrl, lastSync: now} : m
+    m.id === machineId ? {...m, slots, sheetUrl: gasUrl, lastSync: now, maint: json.maintenance || m.maint} : m
   );
   saveState();
+  scheduleMaintExpiry();
   return slots.length;
 }
 function ci(m){return m.slots.reduce((a,s)=>a+s.c,0)}
@@ -769,6 +773,43 @@ async function fetchSummary(gasUrl, period, machineId){
     const json=await res.json();
     return json.ok?json:null;
   }catch(e){return null;}
+}
+
+// ── โหมดซ่อม/ทดสอบ: กดขายหน้าตู้ตอนซ่อม → Apps Script ไม่นับยอด ไม่ตัดสต็อก ไม่แจ้งเตือน ──
+// สถานะจริงอยู่ฝั่ง Apps Script (ปิดเองเมื่อครบเวลา) หน้าเว็บถือแค่ until ไว้โชว์
+function maintOn(m){return !!(m&&m.maint&&m.maint.on&&m.maint.until>Date.now())}
+let _maintTimer=null;
+function scheduleMaintExpiry(){   // ครบเวลาแล้วป้ายต้องหายเอง ไม่ต้องรอกดรีเฟรช
+  clearTimeout(_maintTimer);
+  const next=ST.machines.filter(maintOn).map(m=>m.maint.until).sort((a,b)=>a-b)[0];
+  if(next)_maintTimer=setTimeout(render,next-Date.now()+1000);
+}
+async function loadMaint(){
+  try{
+    const res=await fetch(apiUrl()+'?action=maintenance',{cache:'no-store',redirect:'follow'});
+    const j=await res.json();
+    if(!j||!j.ok||!j.machines)return;   // Apps Script ยังเป็นโค้ดเก่า → ไม่มีโหมดซ่อม
+    ST.machines=ST.machines.map(m=>({...m,maint:j.machines[m.id]||{on:false}}));
+    scheduleMaintExpiry();
+  }catch(e){}
+}
+async function setMaint(mid,on,minutes){
+  const res=await fetch(apiUrl(),{method:'POST',redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'maintenance',machineId:mid,on,minutes})});
+  const j=await res.json();
+  if(!j||!j.ok||!j.result)throw new Error((j&&j.error)||'Apps Script ไม่รู้จักโหมดซ่อม — Deploy โค้ดใหม่แล้วหรือยัง?');
+  ST.machines=ST.machines.map(m=>m.id===mid?{...m,maint:j.result}:m);
+  saveState();scheduleMaintExpiry();
+  return j.result;
+}
+async function runMaint(mid,on,minutes,okMsg){
+  showToast('กำลังส่งคำสั่งไปที่ตู้...','info');
+  try{
+    const r=await setMaint(mid,on,minutes);
+    render();
+    showToast(okMsg||(r.tests?`ปิดโหมดซ่อมแล้ว — กดทดสอบไป ${r.tests} ครั้ง ไม่ถูกนับยอด`:'ปิดโหมดซ่อมแล้ว — กลับมานับยอดตามปกติ'),'success');
+  }catch(err){showToast(err.message,'error');}
 }
 
 // ── ดึงสต็อกโกดัง (action=warehouse) ────────────────────────────────────
@@ -939,6 +980,7 @@ async function loadFleetSummary(){
   // ใช้ sheetUrl จากตู้แรกที่มี URL (Apps Script เดียวกัน ดึง log ตู้ทั้งหมด)
   const m=ST.machines.find(m=>m.sheetUrl&&m.sheetUrl.trim());
   if(!m)return;
+  await loadMaint();   // ป้าย 🔧 บนวงตู้ที่กำลังซ่อม
   // 1) Weekly รวม สำหรับการ์ดด้านล่าง
   const weekData=await fetchSummary(m.sheetUrl,'week');
   if(weekData)ST.fleetSummary=weekData;
@@ -1046,12 +1088,12 @@ function fleetHTML(){
     } else {
       const al=m.slots.filter(s=>s.c===0).length;
       nodes+=`<div class="machine-node" style="margin-left:${x}px;margin-top:${y}px" data-mid="${m.id}">
-        <div class="mn-inner"><div class="mn-circle">
+        <div class="mn-inner"><div class="mn-circle${maintOn(m)?' maint':''}">
           <div class="mn-dot ${m.on?'':'off'}"></div>
           ${al>0?`<div class="mn-alert">${al}</div>`:''}
           <div class="mn-name">${m.name}</div>
           <div class="mn-rev">฿${(m.dailyRev||0).toLocaleString()}</div>
-          <div class="mn-stat">${m.dailySold||0} ขวด/วัน</div>
+          <div class="mn-stat">${maintOn(m)?`${ICON.wrench} ซ่อมอยู่`:`${m.dailySold||0} ขวด/วัน`}</div>
         </div></div>
       </div>`;
     }
@@ -1156,9 +1198,15 @@ function detailHTML(m){
           ${m.on?'<span class="dot-live"></span>':'<span style="width:8px;height:8px;border-radius:50%;background:#6b7280;display:inline-block"></span>'}
           ${m.on?'ONLINE':'OFFLINE'}
         </div>
+        ${m.sheetUrl&&!maintOn(m)?`<button class="btn" id="btn-maint" style="font-size:11px;padding:7px 13px;color:#fb923c;border-color:rgba(249,115,22,0.4)">${ICON.wrench} โหมดซ่อม</button>`:''}
         <button class="btn" id="btn-sheet" style="font-size:11px;padding:7px 13px">${m.sheetUrl?`<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg> Sheet${m.lastSync?' · '+m.lastSync:''}`:' <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-.125em;flex-shrink:0"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> ตั้งค่า Sheet'}</button>
       </div>
     </div>
+    ${maintOn(m)?`<div class="alert" style="background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.45);color:#fb923c;flex-wrap:wrap;margin-bottom:14px">
+      ${ICON.wrench}<span style="flex:1;min-width:200px"><b>โหมดซ่อม/ทดสอบ</b> — กดขายหน้าตู้ตอนนี้ไม่นับยอด ไม่ตัดสต็อก ไม่แจ้งเตือน<br><span style="font-size:11px;color:var(--text-mute)">ปิดเองอัตโนมัติ ${new Date(m.maint.until).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</span></span>
+      <button class="btn" id="btn-maint-extend" style="font-size:11px;padding:7px 12px">+30 นาที</button>
+      <button class="btn pri" id="btn-maint-off" style="font-size:11px;padding:7px 12px">ซ่อมเสร็จ · ปิดโหมด</button>
+    </div>`:''}
     <div class="tabs">
       ${['dash','stock','cab','refill','wh','elec','stats'].map((t,i)=>`<button class="tab${ST.tab===t?' on':''}" data-tab="${t}">${[ICON.dash,ICON.box,ICON.cabinet,ICON.cycle,ICON.warehouse,ICON.bolt,ICON.chart][i]}${['แดชบอร์ด','สต็อก','มุมมองตู้','การเติม','โกดัง','ค่าไฟ','รายงาน'][i]}</button>`).join('')}
     </div>`;
@@ -1688,6 +1736,14 @@ function bind(){
   document.querySelectorAll('[data-add]').forEach(el=>el.addEventListener('click',()=>{ST.modal='add';render()}));
   document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{ST.tab=el.dataset.tab;render();if(ST.tab==='wh'&&!ST.warehouseLoading)loadWarehouse();if(ST.tab==='elec'&&!ST.electricityLoading)loadElectricity();if(ST.tab==='stats'&&!ST.analyticsLoading)loadAnalytics();}));
   on('btn-sheet','click',()=>{const m=selM();ST.su=m?m.sheetUrl:'';ST.modal='sheet';render()});
+  // ── โหมดซ่อม ──
+  on('btn-maint','click',()=>{
+    const m=selM();if(!m)return;
+    showToast(`เปิดโหมดซ่อม ${m.name} 30 นาที?<br><span style="font-size:11px;color:#94a3b8">กดขายหน้าตู้ช่วงนี้จะไม่นับยอด ไม่ตัดสต็อก</span>`,'confirm',
+      ()=>runMaint(m.id,true,30,'เปิดโหมดซ่อมแล้ว — ไปกดทดสอบหน้าตู้ได้เลย'));
+  });
+  on('btn-maint-extend','click',()=>{const m=selM();if(m)runMaint(m.id,true,30,'ต่อเวลาอีก 30 นาทีแล้ว');});
+  on('btn-maint-off','click',()=>{const m=selM();if(m)runMaint(m.id,false,0,null);});
   document.querySelectorAll('[data-imgslot]').forEach(el=>el.addEventListener('click',()=>{
     const sn=parseInt(el.dataset.imgslot);
     const m=selM();const s=m?.slots.find(x=>x.s===sn);
